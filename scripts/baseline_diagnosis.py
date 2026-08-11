@@ -1,132 +1,76 @@
 """
-基线诊断报告。
-综合 Top-K 检索与聚类结果，判断 embedding 是否编码了"个体身份"，
-还是退化为"背景 / 拍摄批次 / 摄影师"等非目标信号。
+基线诊断报告（方向调整后 v2）。
 
-输出 markdown 报告（outputs/diagnosis/baseline_report.md），只依赖
-topk_results.csv / clusters.csv / pilot_set.csv，不需要图片，mock 数据也可运行。
+数据语义（2026-08-11）：目录不直接等于个体 ID。本土数据无可靠 Ground Truth，
+因此**不再计算 rank-1/5 命中率式"识别准确率"**（那是旧假设下的假指标）。
+
+本脚本仅报告可供判断的弱信号：
+1. 检索规模与审核表产出
+2. 同组回召（Anchor 文件夹多帧是否互相在 Top-K 中）——仅反映同一次挑选/连拍的
+   相似性，**不代表跨时间身份能力**，明确标注
+3. 相似度分数分布（供人工审核设阈值参考）
+4. 明确声明：本土无 ground truth，不报告识别准确率
+
+输入：outputs/retrieval/topk_results.csv + topk_for_review.csv + pilot_set.csv
 """
 import argparse
 import json
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 
-def _fmt_frac(d: dict) -> str:
-    """把 {k: v} 转成 'k: 12.3%' 排序文本。"""
-    total = sum(d.values())
-    if total == 0:
-        return "无数据"
-    items = sorted(d.items(), key=lambda x: -x[1])
-    return "，".join(f"{k}: {v / total:.1%}" for k, v in items)
-
-
-def _load_topk(path: Path) -> pd.DataFrame:
-    """读 topk_results.csv，并把 JSON 列表列还原成 list。"""
-    df = pd.read_csv(path)
-    for c in ("retrieved", "retrieved_individuals", "retrieved_scores"):
-        if c in df.columns:
-            df[c] = df[c].apply(lambda s: json.loads(s) if pd.notna(s) else [])
-    return df
-
-
-def diagnose(topk_path: Path, cluster_path: Path, pilot_path: Path, out_dir: Path):
-    topk = _load_topk(topk_path)
-    clusters = pd.read_csv(cluster_path)
-    pilot = pd.read_csv(pilot_path)
-    topk["session_id"] = topk["session_id"].astype(str)
-    clusters["session_id"] = clusters["session_id"].astype(str)
+def diagnose(topk_path: Path, review_path: Path, pilot_path: Path,
+             out_dir: Path) -> None:
+    topk = pd.read_csv(topk_path)
+    review = pd.read_csv(review_path)
+    pilot = pd.read_csv(pilot_path, dtype={"session_id": str})
 
     lines = []
     add = lines.append
-    add("# 基线诊断报告（Pilot Set）")
+    add("# 基线诊断报告（Anchor 检索，方向调整后）")
+    add("")
+    add("> 数据语义：目录 ≠ individual_id。本报告不含识别准确率，只含弱信号与供审核的信息。")
     add("")
 
-    # 1. 数据规模
-    add("## 1. 数据规模")
-    add(f"- 检索：{len(topk)} 张（labeled {len(topk[topk['split'] == 'labeled'])} / "
-        f"loose_known {len(topk[topk['split'] == 'loose_known'])}）")
-    add(f"- 聚类：{len(clusters)} 张，簇 {clusters['cluster'].nunique() - (1 if -1 in clusters['cluster'].values else 0)} 个，"
-        f"噪声 {int((clusters['cluster'] == -1).sum())} 张")
+    # 1. 规模
+    n_query = len(topk)
+    n_review = len(review)
+    n_groups = pilot["individual_id"].nunique()
+    multi = int((pilot.groupby("individual_id").size() > 1).sum())
+    add("## 1. 检索规模")
+    add(f"- Anchor 查询：**{n_query}** 个（{n_groups} 个 Anchor 组，其中多帧组 {multi} 个）")
+    add(f"- 审核表：**{n_review}** 行（{n_query} × Top-K）→ `topk_for_review.csv`")
     add("")
 
-    # 2. Top-K 命中（同调查内）
-    add("## 2. Top-K 检索（同调查内，cosine）")
-    labeled = topk[topk["split"] == "labeled"]
-    rank1 = labeled["rank1_hit"].mean() if "rank1_hit" in labeled else None
-    rank5 = labeled["rank5_hit"].mean() if "rank5_hit" in labeled else None
-    if rank1 is not None:
-        add(f"- rank-1 命中：**{rank1:.1%}**（{int(labeled['rank1_hit'].sum())}/{len(labeled)}）")
-        add(f"- rank-5 命中：**{rank5:.1%}**（{int(labeled['rank5_hit'].sum())}/{len(labeled)}）")
+    # 2. 同组回召弱信号（来自 topk_stats.json 的诊断字段）
+    stats_path = topk_path.parent / "topk_stats.json"
+    stats = json.loads(stats_path.read_text(encoding="utf-8"))
+    diag = stats.get("weak_diagnostic", {})
+    n_g2 = diag.get("anchor_groups_with_2plus", 0)
+    n_hit = diag.get("groups_sibling_in_topk", 0)
+    ratio = diag.get("ratio")
+    add("## 2. 同组回召（弱信号，不代表身份）")
+    add(f"- 含 ≥2 帧的 Anchor 组：**{n_g2}** 个，组内其他照片出现在 Top-K 的组：**{n_hit}**"
+        f"（{ratio:.1%}" if ratio is not None else f"- 含 ≥2 帧的 Anchor 组：**{n_g2}** 个")
+    add("  - 说明：仅反映同一次挑选/连拍帧的相似性，**不能**证明跨时间识别能力；")
+    add("    只能说明 embedding 是否编码了可区分的信息。")
     add("")
 
-    # 3. 检索是否落在同一连拍序列（怀疑：背景相似导致的假命中）
-    # sequence_guess 即"连拍组"：session::帧号_日期_...，同一 key 的图片属于同一连拍簇，
-    # 背景/光线几乎相同，是假命中的最大来源。
-    add("## 3. 假命中诊断：Top-1 是否来自同一连拍序列")
-    if "sequence_guess" in topk.columns:
-        seq_lookup = {r["image_id"]: r["sequence_guess"] for _, r in topk.iterrows()}
-        labeled = topk[topk["split"] == "labeled"]
-        n_false = 0
-        n_same_seq = 0
-        for _, r in labeled.iterrows():
-            if not r["retrieved_individuals"]:
-                continue
-            top1_id = r["retrieved_individuals"][0]
-            if top1_id == r["individual_id"]:
-                continue  # 真命中不算假命中
-            n_false += 1
-            q_seq = r.get("sequence_guess")
-            r_seq = seq_lookup.get(r["retrieved"][0])
-            if isinstance(q_seq, str) and q_seq == r_seq:
-                n_same_seq += 1
-        if n_false:
-            add(f"- 错命中的 Top-1 共 **{n_false}** 例，其中来自同一连拍序列（sequence_guess 相同）："
-                f"**{n_same_seq}** 例（{n_same_seq / n_false:.0%}）")
-            add("  - 若该比例偏高，说明相似性可能来自同一连拍（背景/光线），而非个体身份")
-        else:
-            add("- 无错命中样本")
-    else:
-        add("- 缺少 sequence_guess 字段，跳过")
-    add("")
+    # 3. 分数分布（供人工审核设阈值）
+    if "score" in review and len(review):
+        add("## 3. 相似度分数分布（审核阈值参考）")
+        for rk, sub in review.groupby("rank"):
+            add(f"- Top-{int(rk)} 平均 {sub['score'].mean():.3f}（min {sub['score'].min():.3f} / "
+                f"max {sub['score'].max():.3f}）")
+        add("  - 建议：分数高于同组平均水平的候选优先人工审核；低分候选降权。")
+        add("")
 
-    # 4. 聚类一致性：簇内个体纯度
-    add("## 4. 聚类与个体对照")
-    cl = clusters.copy()
-    cl["ind"] = cl["individual_id"]
-    purity_rows = []
-    for cid, sub in cl[cl["cluster"] >= 0].groupby("cluster"):
-        inds = sub[sub["ind"] != "loose_unknown"]["ind"]
-        if len(inds) >= 2:
-            majority = inds.value_counts().iloc[0]
-            purity_rows.append(majority / len(sub))
-    if purity_rows:
-        add(f"- 多图簇中，主个体占比中位数：**{np.median(purity_rows):.1%}**"
-            f"（簇数 {len(purity_rows)}）")
-        # 簇内 session 多样性：同一簇是否横跨多个 session（跨 session 不应合并）
-        mixed = cl[cl["cluster"] >= 0].groupby("cluster")["session_id"].nunique()
-        n_mixed = int((mixed > 1).sum())
-        add(f"- 跨 session 的簇：**{n_mixed}** 个（若偏高说明聚类混入了拍摄批次信号）")
-    add("")
-
-    # 5. 检索命中 vs 同 session 连拍：rank-1 是否总落在同批
-    add("## 5. 风险小结")
-    risk = []
-    if rank1 is not None and rank1 < 0.3:
-        risk.append("rank-1 命中率过低，说明当前特征对个体区分不足（one-shot 场景常见），需迁移学习。")
-    elif rank1 is not None and rank1 >= 0.6:
-        risk.append("rank-1 命中率较高，需确认是否来自连拍相邻帧的『背景相似』而非个体身份。")
-    if purity_rows and np.median(purity_rows) < 0.5:
-        risk.append("簇内个体纯度低，聚类结果不能直接作为伪标签，需人工核验。")
-    if n_mixed > len(set(cl[cl["cluster"] >= 0]["cluster"])) * 0.3:
-        risk.append("大量簇跨 session，聚类可能被拍摄批次主导。")
-    if not risk:
-        risk.append("当前未发现明显风险信号，但样本量小，结论需谨慎。")
-    for r in risk:
-        add(f"- {r}")
-    add("")
+    # 4. 明确声明
+    add("## 4. 声明")
+    add("- 本土数据无可靠 Ground Truth，**不报告任何识别准确率 / Recall@K**；")
+    add("- 检索结果仅为候选，正式身份须专业人员人工审核；")
+    add("- 定量指标（Recall@K / mAP）只在公开可靠鲸豚数据上计算（主路线 A）。")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     report = out_dir / "baseline_report.md"
@@ -135,11 +79,11 @@ def diagnose(topk_path: Path, cluster_path: Path, pilot_path: Path, out_dir: Pat
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="基线诊断报告")
+    parser = argparse.ArgumentParser(description="基线诊断报告（Anchor 检索弱信号）")
     base = Path(__file__).resolve().parents[1] / "outputs"
     parser.add_argument("--topk", type=Path, default=base / "retrieval" / "topk_results.csv")
-    parser.add_argument("--clusters", type=Path, default=base / "clusters" / "clusters.csv")
+    parser.add_argument("--review", type=Path, default=base / "retrieval" / "topk_for_review.csv")
     parser.add_argument("--pilot", type=Path, default=base / "pilot" / "pilot_set.csv")
     parser.add_argument("--out", type=Path, default=base / "diagnosis")
     args = parser.parse_args()
-    diagnose(args.topk, args.clusters, args.pilot, args.out)
+    diagnose(args.topk, args.review, args.pilot, args.out)

@@ -27,7 +27,7 @@ import pandas as pd
 
 def topk_retrieval(embeddings_path: Path, meta_path: Path, pilot_path: Path,
                    out_dir: Path, k: int = 10, metric: str = "cosine",
-                   cross_session: bool = False):
+                   cross_session: bool = False, anchor_vs_anchor: bool = False):
     emb = np.load(embeddings_path)
     meta = pd.read_csv(meta_path)
     pilot = pd.read_csv(pilot_path)
@@ -55,11 +55,20 @@ def topk_retrieval(embeddings_path: Path, meta_path: Path, pilot_path: Path,
     for idx, row in df.iterrows():
         if not row["is_anchor"]:
             continue  # 只以 Anchor 为 query
-        # gallery：同调查 Pool（默认）；--cross-session 时含全部 Pool 与其他调查 Anchor
-        if cross_session:
+        # gallery：同调查 Pool（默认）；--cross-session 时含全部 Pool 与其他调查 Anchor；
+        # --anchor-vs-anchor 时 gallery = 同调查其他 Anchor（无 Pool 时的自检模式）
+        if anchor_vs_anchor:
+            mask = df["is_anchor"] & (df["session_id"] == row["session_id"]) & (df.index != idx)
+        elif cross_session:
             mask = ~df["is_anchor"] | (df.index != idx)
         else:
             mask = (~df["is_anchor"]) & (df["session_id"] == row["session_id"])
+        if not mask.any():
+            # 当前 Pilot 仅含 Anchor、Pool 为空时，明确提示而不是输出空表
+            raise SystemExit(
+                "gallery 为空：Pilot 当前仅含 Anchor 照片（无 Pool）。"
+                "请先将散图纳入 Pilot（--include-pool）或启用 --anchor-vs-anchor 互检模式。"
+            )
         scores = sim[idx, mask.values]
         cand = df[mask.values].copy()
         cand["score"] = scores
@@ -166,6 +175,9 @@ if __name__ == "__main__":
     parser.add_argument("--k", type=int, default=10)
     parser.add_argument("--cross-session", action="store_true",
                         help="跨调查检索（输出仅作候选，须人工核验）")
+    parser.add_argument("--anchor-vs-anchor", action="store_true",
+                        help="gallery=同调查其他 Anchor（无 Pool 时的自检模式，弱信号）")
     args = parser.parse_args()
     topk_retrieval(args.embeddings, args.meta, args.pilot, args.out, args.k,
-                   cross_session=args.cross_session)
+                   cross_session=args.cross_session,
+                   anchor_vs_anchor=args.anchor_vs_anchor)
