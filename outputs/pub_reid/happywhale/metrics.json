@@ -1,0 +1,13 @@
+{
+  "dataset": "happywhale",
+  "model": "megadescriptor",
+  "mock": true,
+  "n_images": 2247,
+  "n_identities": 1432,
+  "n_query": 50,
+  "n_gallery": 815,
+  "recall_at_1": 0.0,
+  "recall_at_5": 0.06,
+  "recall_at_10": 0.06,
+  "mAP": 0.016666666666666666
+}

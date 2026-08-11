@@ -5,15 +5,53 @@
 运行：python -m unittest tests.test_reid_interfaces -v
 """
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from src.reid.dataset.base import DatasetAdapter, ReIDData  # noqa: E402
 from src.reid.evaluation.metrics import mean_average_precision, recall_at_k  # noqa: E402
 from src.reid.retrieval.cosine import cosine_topk  # noqa: E402
+
+
+class TestDatasetAdapter(unittest.TestCase):
+    """DatasetAdapter 统一 schema 与 namespace 约定。"""
+
+    def test_normalize_fills_columns(self):
+        class FakeAdapter(DatasetAdapter):
+            name = "fake"
+            has_identity = True
+
+            def load(self, data_root=None):  # pragma: no cover
+                df = pd.DataFrame({"image_path": ["a.jpg"], "identity": ["fake__x"]})
+                return self._normalize(df)
+
+        data = FakeAdapter().load()
+        self.assertEqual(data.n_images, 1)
+        self.assertEqual(data.n_identities, 1)
+        # 缺失列补 None
+        for c in ["species", "source_dataset", "encounter_id",
+                  "date", "viewpoint", "split"]:
+            self.assertTrue((data.df[c].isna()).all())
+
+    def test_identity_namespace(self):
+        """identity 必须 namespace（跨源 ID 防冲突）。"""
+        class FakeAdapter(DatasetAdapter):
+            name = "fake"
+            has_identity = True
+
+            def load(self, data_root=None):  # pragma: no cover
+                df = pd.DataFrame({"identity": ["fake__1", "fake__2"]})
+                return self._normalize(df)
+
+        data = FakeAdapter().load()
+        self.assertEqual(data.n_identities, 2)
+        self.assertTrue(all(i.startswith("fake__") for i in data.df["identity"]))
 
 
 class TestCosineTopk(unittest.TestCase):

@@ -76,25 +76,25 @@ class _HFImageModel(EmbeddingModel):
 
 
 class DINOv2Adapter(_HFImageModel):
-    """DINOv2 通用自监督视觉表征（主路线 A 对照组）。"""
+    """DINOv2 通用自监督视觉表征（主路线 A 对照组）。
+
+    通过 timm 加载（vit_base_patch14_dinov2.lvd142m = 官方 DINOv2 权重），
+    权重经 hf-mirror 通道下载（与 MegaDescriptor 一致）。
+    """
 
     name = "dinov2"
-    input_size = 518
+    input_size = 224
     feat_dim = 768
 
     def _load(self):
-        # DINOv2 权重在 hf，通过 HF_ENDPOINT 镜像下载
-        torch.hub.set_dir(str(Path.home() / ".cache" / "torch" / "hub"))
-        self.model = torch.hub.load(
-            "facebookresearch/dinov2", "dinov2_vitb14", source="local"
-        ).to(self.device) if False else None  # placeholder，见下方真实加载
-        # 真实加载：dinov2 无 timm 包装，走 torch.hub（需 github 可达）。
-        # 若 github 不可达，改用 hf 上的 dinov2 权重（huggingface.co/facebook/dinov2-base）。
-        from huggingface_hub import PyTorchModelHubMixin  # noqa: F401
+        import timm
 
-        raise NotImplementedError(
-            "DINOv2 加载需适配：优先用 hf 镜像的 facebook/dinov2-base 权重。"
-            "待数据就绪后实现，见 src/reid/embedding/dinov2.py。")
+        self.model = timm.create_model(
+            "vit_base_patch14_dinov2.lvd142m", pretrained=True, num_classes=0)
+        self.model.eval()
+        if self.device.type == "cuda":
+            self.model = self.model.to(self.device)
+        self.feat_dim = self.model.num_features
 
 
 class MegaDescriptorAdapter(_HFImageModel):

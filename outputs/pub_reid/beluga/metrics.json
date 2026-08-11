@@ -1,0 +1,102 @@
+{
+  "dataset": "beluga",
+  "model": "megadescriptor",
+  "mock": true,
+  "n_scenarios": 10,
+  "recall_at_1": 0.004519239130819595,
+  "recall_at_5": 0.02247522855457475,
+  "recall_at_10": 0.054034668956493025,
+  "mAP": 0.01451848911675277,
+  "per_scenario": [
+    {
+      "scenario": "scenario01",
+      "n_query": 1184,
+      "n_gallery": 2107,
+      "recall@1": 0.0033783783783783786,
+      "recall@5": 0.0059121621621621625,
+      "recall@10": 0.015202702702702704,
+      "mAP": 0.0053460826898326895
+    },
+    {
+      "scenario": "scenario02",
+      "n_query": 568,
+      "n_gallery": 66,
+      "recall@1": 0.0,
+      "recall@5": 0.0,
+      "recall@10": 0.0,
+      "mAP": 0.0
+    },
+    {
+      "scenario": "scenario03",
+      "n_query": 616,
+      "n_gallery": 2041,
+      "recall@1": 0.003246753246753247,
+      "recall@5": 0.00974025974025974,
+      "recall@10": 0.011363636363636364,
+      "mAP": 0.0056998556998557
+    },
+    {
+      "scenario": "scenario04",
+      "n_query": 280,
+      "n_gallery": 831,
+      "recall@1": 0.0,
+      "recall@5": 0.0035714285714285713,
+      "recall@10": 0.0035714285714285713,
+      "mAP": 0.0007142857142857143
+    },
+    {
+      "scenario": "scenario05",
+      "n_query": 306,
+      "n_gallery": 665,
+      "recall@1": 0.0,
+      "recall@5": 0.0,
+      "recall@10": 0.0,
+      "mAP": 0.0
+    },
+    {
+      "scenario": "scenario06",
+      "n_query": 501,
+      "n_gallery": 708,
+      "recall@1": 0.001996007984031936,
+      "recall@5": 0.00998003992015968,
+      "recall@10": 0.02594810379241517,
+      "mAP": 0.006067230618128821
+    },
+    {
+      "scenario": "scenario07",
+      "n_query": 274,
+      "n_gallery": 403,
+      "recall@1": 0.0,
+      "recall@5": 0.04744525547445255,
+      "recall@10": 0.072992700729927,
+      "mAP": 0.02146043332174719
+    },
+    {
+      "scenario": "scenario08",
+      "n_query": 282,
+      "n_gallery": 338,
+      "recall@1": 0.010638297872340425,
+      "recall@5": 0.028368794326241134,
+      "recall@10": 0.06382978723404255,
+      "mAP": 0.01990037149611618
+    },
+    {
+      "scenario": "scenario09",
+      "n_query": 102,
+      "n_gallery": 319,
+      "recall@1": 0.00980392156862745,
+      "recall@5": 0.029411764705882353,
+      "recall@10": 0.17647058823529413,
+      "mAP": 0.03626672891378774
+    },
+    {
+      "scenario": "scenario10",
+      "n_query": 310,
+      "n_gallery": 111,
+      "recall@1": 0.016129032258064516,
+      "recall@5": 0.09032258064516129,
+      "recall@10": 0.17096774193548386,
+      "mAP": 0.04972990271377368
+    }
+  ]
+}
