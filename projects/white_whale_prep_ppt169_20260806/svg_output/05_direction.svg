@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" data-pptx-page-role="content">
+  <rect id="bg" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+  <g id="header" data-pptx-bounds="0 0 1280 90">
+    <rect x="0" y="0" width="1280" height="90" fill="#1E3A5F"/>
+    <rect x="0" y="0" width="10" height="90" fill="#E8B339"/>
+    <text x="70" y="56" font-family="Microsoft YaHei, sans-serif" font-size="34" font-weight="bold" fill="#FFFFFF">数据特点决定技术方向</text>
+  </g>
+  <g id="card-oneshot" data-pptx-bounds="70 130 560 150">
+    <rect x="70" y="130" width="560" height="150" rx="8" fill="#F2F5F9"/>
+    <rect x="70" y="130" width="10" height="150" fill="#1E3A5F"/>
+    <text x="110" y="172" font-family="Microsoft YaHei, sans-serif" font-size="19" font-weight="bold" fill="#1E3A5F">极端少样本</text>
+    <text x="110" y="202" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">43 个个体各 1 张，模型无法从零训练</text>
+    <text x="110" y="242" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#BF0000">→ 迁移学习：外部鲸豚预训练 + 本地微调</text>
+  </g>
+  <g id="card-loose" data-pptx-bounds="650 130 560 150">
+    <rect x="650" y="130" width="560" height="150" rx="8" fill="#F2F5F9"/>
+    <rect x="650" y="130" width="10" height="150" fill="#E8B339"/>
+    <text x="690" y="172" font-family="Microsoft YaHei, sans-serif" font-size="19" font-weight="bold" fill="#1E3A5F">207 张散图归属未确认</text>
+    <text x="690" y="202" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">70-79 分，属于已分组个体但归属待定</text>
+    <text x="690" y="242" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#BF0000">→ 分拣扩充标签 + candidate-label 弱监督</text>
+  </g>
+  <g id="card-side" data-pptx-bounds="70 300 560 150">
+    <rect x="70" y="300" width="560" height="150" rx="8" fill="#F2F5F9"/>
+    <rect x="70" y="300" width="10" height="150" fill="#E8B339"/>
+    <text x="110" y="342" font-family="Microsoft YaHei, sans-serif" font-size="19" font-weight="bold" fill="#1E3A5F">背鳍左右两面</text>
+    <text x="110" y="372" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">左右侧特征不同，不可默认翻转</text>
+    <text x="110" y="412" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#BF0000">→ 朝向标注，左右侧分别比较</text>
+  </g>
+  <g id="card-cross" data-pptx-bounds="650 300 560 150">
+    <rect x="650" y="300" width="560" height="150" rx="8" fill="#F2F5F9"/>
+    <rect x="650" y="300" width="10" height="150" fill="#BF0000"/>
+    <text x="690" y="342" font-family="Microsoft YaHei, sans-serif" font-size="19" font-weight="bold" fill="#1E3A5F">同一天两群 / 跨调查未核验</text>
+    <text x="690" y="372" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">01 与 03 同日拍摄，同名编号跨调查不合并</text>
+    <text x="690" y="412" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#BF0000">→ 调查内比较，跨调查仅作候选</text>
+  </g>
+  <g id="takeaway" data-pptx-bounds="70 480 1140 140">
+    <rect x="70" y="480" width="1140" height="140" rx="8" fill="#1E3A5F"/>
+    <text x="100" y="526" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="bold" fill="#E8B339">两个技术方向由此确定</text>
+    <text x="100" y="566" font-family="Microsoft YaHei, sans-serif" font-size="18" fill="#FFFFFF">①　跨物种迁移学习 — 解决少样本、利用外部鲸豚数据<tspan x="100" dy="30">②　散图分拣利用 — 207 张候选图扩充标签、缓解 one-shot</tspan></text>
+  </g>
+  <g id="footer" data-pptx-bounds="60 660 1160 30">
+    <text x="70" y="684" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#666666">数据现状</text>
+    <text x="1200" y="684" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#666666">5 / 12</text>
+  </g>
+</svg>

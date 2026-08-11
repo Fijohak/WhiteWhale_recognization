@@ -1,0 +1,9 @@
+{
+  "model": "mock",
+  "mock": true,
+  "device": "cuda",
+  "feat_dim": 128,
+  "batch_size": 16,
+  "images_root": "I:\\",
+  "n": 406
+}

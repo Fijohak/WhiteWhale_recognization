@@ -1,0 +1,4 @@
+No,Filename,Width,Height,AspectRatio,PixelAspectRatio,RatioSource,UsageCount,DisplayRatioVariants,AssetKind,SvgRenderable,PptxNativeSupported,SizeKB,Category,ImageArea_SxS,TextArea_SxS
+1,label_status.png,1400,900,1.56,1.56,pixel,1,,bitmap,True,True,45.0,Wide landscape,812x522,328x600
+2,quality_band.png,1400,900,1.56,1.56,pixel,1,,bitmap,True,True,37.9,Wide landscape,812x522,328x600
+3,session_dist.png,1200,800,1.50,1.50,pixel,1,,bitmap,True,True,27.8,Standard landscape,812x541,328x600

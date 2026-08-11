@@ -1,0 +1,194 @@
+{
+  "schema": "ppt-master.pptx-postflight-report.v1",
+  "status": "passed",
+  "output": {
+    "path": "E:\\桌面\\中华白海豚个体识别\\WhiteWhale_recognization\\outputs\\reports\\中华白海豚前期准备汇报_20260807.pptx",
+    "bytes": 157876
+  },
+  "source": {
+    "svg_slide_count": 12,
+    "layout_definition_count": 0,
+    "fingerprint": {
+      "algorithm": "sha256",
+      "digest": "8a4bd5927d7c35d662e2cc9f2c823d0a51733be7c52ca50ee43619d706a63611",
+      "file_count": 12,
+      "files": [
+        {
+          "file": "01_cover.svg",
+          "sha256": "6166095f6228ae317f9530ce1254b7e8c29d407c717b2cfdb5e72978d9e0e5bd"
+        },
+        {
+          "file": "02_progress.svg",
+          "sha256": "2a8e7256da43c60120c33608575721a1bf39d8d2bd40d378f1ef8d2deff9f9a6"
+        },
+        {
+          "file": "03_scale.svg",
+          "sha256": "4fe7afb0826ea793b5ce510fef1baf87d33be1fec8e9160d5f6deb08c3e12fd1"
+        },
+        {
+          "file": "04_distribution.svg",
+          "sha256": "a6067a8c712369140632d5c5320733de78690f7a06425862ebaa3c26b0254534"
+        },
+        {
+          "file": "05_labels.svg",
+          "sha256": "114168f6d49a87e6140e8ebb7739481541a85726e6171b3fedeebe392c8adce0"
+        },
+        {
+          "file": "06_facts.svg",
+          "sha256": "d498db7572fc9bea3c3c6f5284d50924154d1b08ff925880cad50bc52e84422f"
+        },
+        {
+          "file": "07_deliverables.svg",
+          "sha256": "85d3c00ec0a8e2aaf139e9aea995988933650c6676374a4df73bd836620aac65"
+        },
+        {
+          "file": "08_constraints.svg",
+          "sha256": "c30854ed2a42b03bd58b4c7ac1ca76d3a5441d0be544a2247f9a57397ccb98f3"
+        },
+        {
+          "file": "09_todos.svg",
+          "sha256": "3f59e885800ae0c1d800cafca1cdd7226dd2ad23a27b3c6be4f6d0cb5c1b2c60"
+        },
+        {
+          "file": "10_pilot.svg",
+          "sha256": "787f8b40bb33a10acd746f6bdf3719a5215230eca70da520c67bba896b74240a"
+        },
+        {
+          "file": "11_roadmap.svg",
+          "sha256": "5de75529c6e7fc6ee7b56ed52d78de8e8fe1f8adc3cfb35bf5a4ccaa5e77cd42"
+        },
+        {
+          "file": "12_ending.svg",
+          "sha256": "ef396dd5ff24286d88a7ecad47b1f12d442cfbe31ecfc89823ea10b8b8147fc8"
+        }
+      ]
+    }
+  },
+  "package": {
+    "zip_integrity": "passed",
+    "corrupt_member": null,
+    "slides": 12,
+    "notes": 12,
+    "masters": 1,
+    "layouts": 1
+  },
+  "checks": {
+    "zip_integrity": "passed",
+    "slide_count": "passed",
+    "internal_relationships": "enforced-at-build",
+    "structured_package": "not-applicable",
+    "transitions": "enforced-at-build",
+    "animations": "enforced-at-build",
+    "quality_gate": "passed",
+    "quality_warnings": "passed",
+    "template_tokens": "passed",
+    "external_images": "passed",
+    "font_portability": "passed"
+  },
+  "quality": {
+    "status": "loaded",
+    "path": "E:\\桌面\\中华白海豚个体识别\\WhiteWhale_recognization\\projects\\white_whale_prep_ppt169_20260806\\validation\\svg_quality_report.json",
+    "schema": "ppt-master.svg-quality-report.v1",
+    "stage": "final",
+    "source_match": "passed",
+    "source_fingerprint": {
+      "algorithm": "sha256",
+      "digest": "8a4bd5927d7c35d662e2cc9f2c823d0a51733be7c52ca50ee43619d706a63611",
+      "file_count": 12,
+      "files": [
+        {
+          "file": "01_cover.svg",
+          "sha256": "6166095f6228ae317f9530ce1254b7e8c29d407c717b2cfdb5e72978d9e0e5bd"
+        },
+        {
+          "file": "02_progress.svg",
+          "sha256": "2a8e7256da43c60120c33608575721a1bf39d8d2bd40d378f1ef8d2deff9f9a6"
+        },
+        {
+          "file": "03_scale.svg",
+          "sha256": "4fe7afb0826ea793b5ce510fef1baf87d33be1fec8e9160d5f6deb08c3e12fd1"
+        },
+        {
+          "file": "04_distribution.svg",
+          "sha256": "a6067a8c712369140632d5c5320733de78690f7a06425862ebaa3c26b0254534"
+        },
+        {
+          "file": "05_labels.svg",
+          "sha256": "114168f6d49a87e6140e8ebb7739481541a85726e6171b3fedeebe392c8adce0"
+        },
+        {
+          "file": "06_facts.svg",
+          "sha256": "d498db7572fc9bea3c3c6f5284d50924154d1b08ff925880cad50bc52e84422f"
+        },
+        {
+          "file": "07_deliverables.svg",
+          "sha256": "85d3c00ec0a8e2aaf139e9aea995988933650c6676374a4df73bd836620aac65"
+        },
+        {
+          "file": "08_constraints.svg",
+          "sha256": "c30854ed2a42b03bd58b4c7ac1ca76d3a5441d0be544a2247f9a57397ccb98f3"
+        },
+        {
+          "file": "09_todos.svg",
+          "sha256": "3f59e885800ae0c1d800cafca1cdd7226dd2ad23a27b3c6be4f6d0cb5c1b2c60"
+        },
+        {
+          "file": "10_pilot.svg",
+          "sha256": "787f8b40bb33a10acd746f6bdf3719a5215230eca70da520c67bba896b74240a"
+        },
+        {
+          "file": "11_roadmap.svg",
+          "sha256": "5de75529c6e7fc6ee7b56ed52d78de8e8fe1f8adc3cfb35bf5a4ccaa5e77cd42"
+        },
+        {
+          "file": "12_ending.svg",
+          "sha256": "ef396dd5ff24286d88a7ecad47b1f12d442cfbe31ecfc89823ea10b8b8147fc8"
+        }
+      ]
+    },
+    "summary": {
+      "total": 12,
+      "passed": 12,
+      "warnings": 0,
+      "errors": 0
+    },
+    "categories": {
+      "blocking": {
+        "count": 0,
+        "issues": []
+      },
+      "introduced": {
+        "count": 0,
+        "issues": []
+      },
+      "inherited": {
+        "count": 0,
+        "issues": []
+      },
+      "source-import": {
+        "count": 0,
+        "summary": {
+          "warning_count": 0,
+          "by_code": {}
+        }
+      }
+    }
+  },
+  "resources": {
+    "unresolved_template_tokens": [],
+    "fonts": {
+      "stacks": [
+        "Microsoft YaHei, sans-serif"
+      ],
+      "generic_only_stacks": []
+    },
+    "images": {
+      "data_uri": 0,
+      "local": 3,
+      "external": 0,
+      "external_references": []
+    }
+  },
+  "backup_path": null,
+  "conversion_trace_path": null
+}

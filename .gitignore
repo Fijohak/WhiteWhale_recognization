@@ -1,0 +1,19 @@
+# 本地 Claude 配置（权限等），不入库
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 大文件：模型权重、原始数据目录
+models/
+data/
+*.pt
+*.pth
+*.onnx
+
+# 临时与日志
+*.log
+.DS_Store

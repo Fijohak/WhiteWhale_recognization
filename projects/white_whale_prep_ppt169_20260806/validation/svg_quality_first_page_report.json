@@ -1,0 +1,102 @@
+{
+  "schema": "ppt-master.svg-quality-report.v1",
+  "stage": "first-page",
+  "target": "E:\\桌面\\中华白海豚个体识别\\WhiteWhale_recognization\\projects\\white_whale_prep_ppt169_20260806",
+  "source_fingerprint": {
+    "algorithm": "sha256",
+    "digest": "0f8f7ce77b3c265118ac90330049acec2d45904499a9a0c93a46276a406e19d7",
+    "file_count": 1,
+    "files": [
+      {
+        "file": "01_cover.svg",
+        "sha256": "6166095f6228ae317f9530ce1254b7e8c29d407c717b2cfdb5e72978d9e0e5bd"
+      }
+    ]
+  },
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "warnings": 0,
+    "errors": 0
+  },
+  "issue_types": {},
+  "categories": {
+    "blocking": {
+      "count": 0,
+      "issues": []
+    },
+    "introduced": {
+      "count": 0,
+      "issues": []
+    },
+    "inherited": {
+      "count": 0,
+      "issues": []
+    },
+    "source-import": {
+      "count": 0,
+      "summary": {
+        "warning_count": 0,
+        "by_code": {}
+      }
+    }
+  },
+  "drift": {
+    "colors": {
+      "#122540": [
+        "01_cover.svg"
+      ],
+      "#B8D0E8": [
+        "01_cover.svg"
+      ]
+    },
+    "fonts": {
+      "Microsoft YaHei, sans-serif": [
+        "01_cover.svg"
+      ]
+    },
+    "sizes": {
+      "42": [
+        "01_cover.svg"
+      ]
+    }
+  },
+  "project_issues": {
+    "template": [],
+    "animation": [],
+    "illustration": [],
+    "communication_trace": [],
+    "pptx_structure": []
+  },
+  "files": [
+    {
+      "file": "01_cover.svg",
+      "path": "E:\\桌面\\中华白海豚个体识别\\WhiteWhale_recognization\\projects\\white_whale_prep_ppt169_20260806\\svg_output\\01_cover.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "fonts": [
+          "Microsoft YaHei, sans-serif"
+        ],
+        "text_elements": 4,
+        "tspan_elements": 0,
+        "contextual_values": {
+          "colors": [
+            "#122540",
+            "#B8D0E8"
+          ],
+          "font_families": [
+            "Microsoft YaHei, sans-serif"
+          ]
+        },
+        "sparse_typography_sizes": {
+          "42": 1
+        }
+      },
+      "passed": true,
+      "source_sha256": "6166095f6228ae317f9530ce1254b7e8c29d407c717b2cfdb5e72978d9e0e5bd"
+    }
+  ]
+}

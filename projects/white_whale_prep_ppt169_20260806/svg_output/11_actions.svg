@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" data-pptx-page-role="content">
+  <rect id="bg" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+  <g id="header" data-pptx-bounds="0 0 1280 90">
+    <rect x="0" y="0" width="1280" height="90" fill="#1E3A5F"/>
+    <rect x="0" y="0" width="10" height="90" fill="#E8B339"/>
+    <text x="70" y="56" font-family="Microsoft YaHei, sans-serif" font-size="34" font-weight="bold" fill="#FFFFFF">交付与行动 — 索引已就绪，行动待启动</text>
+  </g>
+  <g id="deliverables" data-pptx-bounds="70 130 1140 150">
+    <text x="90" y="172" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="bold" fill="#1E3A5F">已交付 — 索引四件套（outputs/index/）</text>
+    <text x="90" y="212" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#2B3440">dataset_manifest.csv（2863×28 字段）· dataset_stats.json · dataset_tree.txt · unreadable_files.csv（0 损坏）</text>
+    <text x="90" y="244" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#666666">每张图片可追溯原始路径 · 原始数据只读 · 脚本可重跑</text>
+  </g>
+  <g id="action-1" data-pptx-bounds="70 300 370 180">
+    <rect x="70" y="300" width="370" height="180" rx="8" fill="#F2F5F9"/>
+    <rect x="70" y="300" width="370" height="8" fill="#1E3A5F"/>
+    <text x="100" y="350" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="bold" fill="#1E3A5F">① 散图分拣</text>
+    <text x="100" y="390" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#2B3440">207 张（01：59 / 03：148）<tspan x="100" dy="30">人工分配到个体文件夹</tspan></text>
+    <text x="100" y="450" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#BF0000">→ 标签扩充，缓解 one-shot</text>
+  </g>
+  <g id="action-2" data-pptx-bounds="460 300 370 180">
+    <rect x="460" y="300" width="370" height="180" rx="8" fill="#F2F5F9"/>
+    <rect x="460" y="300" width="370" height="8" fill="#E8B339"/>
+    <text x="490" y="350" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="bold" fill="#1E3A5F">② 外部数据下载</text>
+    <text x="490" y="390" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#2B3440">NDD20 → NOAA → Beluga<tspan x="490" dy="30">→ Happywhale（规模递增）</tspan></text>
+    <text x="490" y="450" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#BF0000">→ 启动迁移实验</text>
+  </g>
+  <g id="action-3" data-pptx-bounds="850 300 370 180">
+    <rect x="850" y="300" width="370" height="180" rx="8" fill="#F2F5F9"/>
+    <rect x="850" y="300" width="370" height="8" fill="#E8B339"/>
+    <text x="880" y="350" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="bold" fill="#1E3A5F">③ 朝向标注规范</text>
+    <text x="880" y="390" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#2B3440">每张照片记录 left / right<tspan x="880" dy="30">/ unknown</tspan></text>
+    <text x="880" y="450" font-family="Microsoft YaHei, sans-serif" font-size="16" font-weight="bold" fill="#BF0000">→ 左右侧分别比较</text>
+  </g>
+  <g id="pending" data-pptx-bounds="70 510 1140 120">
+    <rect x="70" y="510" width="1140" height="120" rx="8" fill="#F2F5F9"/>
+    <rect x="70" y="510" width="10" height="120" fill="#BF0000"/>
+    <text x="110" y="554" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="bold" fill="#BF0000">待确认（一项）</text>
+    <text x="110" y="592" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#2B3440">数据授权（训练 / 发布）· individual.docx 内容 · 50-69 区间含义</text>
+  </g>
+  <g id="footer" data-pptx-bounds="60 660 1160 30">
+    <text x="70" y="684" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#666666">路线与行动</text>
+    <text x="1200" y="684" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#666666">11 / 12</text>
+  </g>
+</svg>

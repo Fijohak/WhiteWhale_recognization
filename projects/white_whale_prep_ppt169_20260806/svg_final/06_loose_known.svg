@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" data-pptx-page-role="content">
+  <rect id="bg" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+  <g id="header" data-pptx-bounds="0 0 1280 90">
+    <rect x="0" y="0" width="1280" height="90" fill="#1E3A5F"/>
+    <rect x="0" y="0" width="10" height="90" fill="#E8B339"/>
+    <text x="70" y="56" font-family="Microsoft YaHei, sans-serif" font-size="34" font-weight="bold" fill="#FFFFFF">散图利用 — 207 张候选图的两种用法</text>
+  </g>
+  <g id="path-a" data-pptx-bounds="70 130 560 330">
+    <rect x="70" y="130" width="560" height="330" rx="8" fill="#F2F5F9"/>
+    <rect x="70" y="130" width="10" height="330" fill="#1E3A5F"/>
+    <text x="110" y="180" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="bold" fill="#1E3A5F">路径 A · 人工分拣</text>
+    <text x="110" y="218" font-family="Microsoft YaHei, sans-serif" font-size="17" fill="#2B3440">01：59 张 / 03：148 张</text>
+    <text x="110" y="258" font-family="Microsoft YaHei, sans-serif" font-size="17" fill="#2B3440">分配到对应个体文件夹</text>
+    <text x="110" y="298" font-family="Microsoft YaHei, sans-serif" font-size="17" fill="#2B3440">更新 Manifest</text>
+    <text x="110" y="368" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="bold" fill="#BF0000">→ 个体标签直接扩充</text>
+    <text x="110" y="402" font-family="Microsoft YaHei, sans-serif" font-size="17" fill="#2B3440">缓解 one-shot 少样本问题</text>
+  </g>
+  <g id="path-b" data-pptx-bounds="650 130 560 330">
+    <rect x="650" y="130" width="560" height="330" rx="8" fill="#F2F5F9"/>
+    <rect x="650" y="130" width="10" height="330" fill="#E8B339"/>
+    <text x="690" y="180" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="bold" fill="#1E3A5F">路径 B · candidate-label</text>
+    <text x="690" y="218" font-family="Microsoft YaHei, sans-serif" font-size="17" fill="#2B3440">分拣前即参与训练</text>
+    <text x="690" y="258" font-family="Microsoft YaHei, sans-serif" font-size="17" fill="#2B3440">约束：同调查 · 同评分区间（70-79）</text>
+    <text x="690" y="298" font-family="Microsoft YaHei, sans-serif" font-size="17" fill="#2B3440">只能作「候选集合」弱监督信息</text>
+    <text x="690" y="368" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="bold" fill="#BF0000">→ 不作为个体标签</text>
+    <text x="690" y="402" font-family="Microsoft YaHei, sans-serif" font-size="17" fill="#2B3440">跨调查候选不作对应假设</text>
+  </g>
+  <g id="takeaway" data-pptx-bounds="70 490 1140 130">
+    <rect x="70" y="490" width="1140" height="130" rx="8" fill="#1E3A5F"/>
+    <text x="100" y="540" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="bold" fill="#E8B339">散图不是负担，是标签扩充池</text>
+    <text x="100" y="580" font-family="Microsoft YaHei, sans-serif" font-size="17" fill="#FFFFFF">分拣一张，可用训练样本 +1；分拣完成 207 张后，个体样本数最多可提升一倍以上</text>
+  </g>
+  <g id="footer" data-pptx-bounds="60 660 1160 30">
+    <text x="70" y="684" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#666666">技术方向</text>
+    <text x="1200" y="684" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#666666">6 / 12</text>
+  </g>
+</svg>

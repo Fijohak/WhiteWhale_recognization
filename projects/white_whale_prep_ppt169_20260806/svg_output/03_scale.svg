@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" data-pptx-page-role="content">
+  <rect id="bg" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+  <g id="header" data-pptx-bounds="0 0 1280 90">
+    <rect x="0" y="0" width="1280" height="90" fill="#1E3A5F"/>
+    <rect x="0" y="0" width="10" height="90" fill="#E8B339"/>
+    <text x="70" y="56" font-family="Microsoft YaHei, sans-serif" font-size="34" font-weight="bold" fill="#FFFFFF">数据规模 — 2863 张野外调查照片</text>
+  </g>
+  <g id="kpi-total" data-pptx-bounds="70 120 270 130">
+    <rect x="70" y="120" width="270" height="130" rx="8" fill="#1E3A5F"/>
+    <text x="205" y="182" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="42" font-weight="bold" fill="#E8B339">2863</text>
+    <text x="205" y="222" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#FFFFFF">总图片数（01: 818 · 03: 2045）</text>
+  </g>
+  <g id="kpi-labeled" data-pptx-bounds="360 120 270 130">
+    <rect x="360" y="120" width="270" height="130" rx="8" fill="#F2F5F9"/>
+    <text x="495" y="182" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="42" font-weight="bold" fill="#1E3A5F">43</text>
+    <text x="495" y="222" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#2B3440">已分组个体 · 199 张</text>
+  </g>
+  <g id="kpi-loose" data-pptx-bounds="650 120 270 130">
+    <rect x="650" y="120" width="270" height="130" rx="8" fill="#F2F5F9"/>
+    <text x="785" y="182" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="42" font-weight="bold" fill="#BF0000">207</text>
+    <text x="785" y="222" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#2B3440">70-79 散图（归属待确认）</text>
+  </g>
+  <g id="kpi-ignored" data-pptx-bounds="940 120 270 130">
+    <rect x="940" y="120" width="270" height="130" rx="8" fill="#F2F5F9"/>
+    <text x="1075" y="182" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="42" font-weight="bold" fill="#1E3A5F">2457</text>
+    <text x="1075" y="222" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="16" fill="#2B3440">低于 70 分 / 拍摄者目录</text>
+  </g>
+  <g id="detail-left" data-pptx-bounds="70 290 560 340">
+    <text x="90" y="336" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="bold" fill="#1E3A5F">个体与标签统计</text>
+    <rect x="90" y="356" width="540" height="34" fill="#1E3A5F"/>
+    <text x="110" y="378" font-family="Microsoft YaHei, sans-serif" font-size="15" font-weight="bold" fill="#FFFFFF">指标</text>
+    <text x="470" y="378" font-family="Microsoft YaHei, sans-serif" font-size="15" font-weight="bold" fill="#FFFFFF">数值</text>
+    <rect x="90" y="390" width="540" height="32" fill="#F2F5F9"/>
+    <text x="110" y="411" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">单图个体</text>
+    <text x="490" y="411" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">15 个</text>
+    <rect x="90" y="422" width="540" height="32" fill="#FFFFFF"/>
+    <text x="110" y="443" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">多图个体（含连拍）</text>
+    <text x="490" y="443" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">28 个</text>
+    <rect x="90" y="454" width="540" height="32" fill="#F2F5F9"/>
+    <text x="110" y="475" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">个体最多图片数</text>
+    <text x="490" y="475" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">27 张</text>
+    <rect x="90" y="486" width="540" height="32" fill="#FFFFFF"/>
+    <text x="110" y="507" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">可读图片 / 损坏</text>
+    <text x="490" y="507" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">2863 / 0</text>
+    <rect x="90" y="518" width="540" height="32" fill="#F2F5F9"/>
+    <text x="110" y="539" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">精确重复组（SHA-256）</text>
+    <text x="490" y="539" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">1 组 2 张</text>
+    <rect x="90" y="558" width="540" height="58" rx="6" fill="#1E3A5F"/>
+    <text x="110" y="588" font-family="Microsoft YaHei, sans-serif" font-size="15" font-weight="bold" fill="#FFFFFF">个体数按标签 {session}_{group_id} 计</text>
+    <text x="110" y="606" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#B8D0E8">跨调查同名编号未合并，需人工核验</text>
+  </g>
+  <g id="detail-right" data-pptx-bounds="650 290 560 340">
+    <text x="670" y="336" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="bold" fill="#1E3A5F">批次分布</text>
+    <rect x="670" y="356" width="540" height="34" fill="#1E3A5F"/>
+    <text x="690" y="378" font-family="Microsoft YaHei, sans-serif" font-size="15" font-weight="bold" fill="#FFFFFF">调查批次</text>
+    <text x="1030" y="378" font-family="Microsoft YaHei, sans-serif" font-size="15" font-weight="bold" fill="#FFFFFF">图片数</text>
+    <rect x="670" y="390" width="540" height="32" fill="#F2F5F9"/>
+    <text x="690" y="411" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">I:\01（20140417W01 · SZi）</text>
+    <text x="1030" y="411" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">818</text>
+    <rect x="670" y="422" width="540" height="32" fill="#FFFFFF"/>
+    <text x="690" y="443" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">I:\03（20140417W03 · HBi）</text>
+    <text x="1030" y="443" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#2B3440">2045</text>
+    <rect x="670" y="454" width="540" height="60" rx="6" fill="#F2F5F9"/>
+    <text x="690" y="484" font-family="Microsoft YaHei, sans-serif" font-size="15" font-weight="bold" fill="#2B3440">同一天（20140417）拍摄的两群海豚</text>
+    <text x="690" y="504" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#666666">属两个独立调查批次，跨调查个体对应未核验</text>
+  </g>
+  <g id="footer" data-pptx-bounds="60 660 1160 30">
+    <text x="70" y="684" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#666666">数据事实</text>
+    <text x="1200" y="684" text-anchor="end" font-family="Microsoft YaHei, sans-serif" font-size="14" fill="#666666">3 / 12</text>
+  </g>
+</svg>
