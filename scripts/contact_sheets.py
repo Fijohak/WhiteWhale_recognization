@@ -1,6 +1,9 @@
 """
-拼图（contact sheet）生成。
-按聚类簇或个体分组输出图片拼图（每簇一张），便于人工核验候选簇。
+拼图（contact sheet）生成（Anchor 版）。
+
+按 Anchor 组（高分目录数字子文件夹 = 代表照片组，非个体 ID）输出拼图，
+供人工核验代表照片与候选检索结果。
+
 真实运行需要 I 盘图片；--mock 模式生成占位色块验证布局逻辑。
 """
 import argparse
@@ -11,6 +14,7 @@ import pandas as pd
 from PIL import Image, ImageDraw
 
 GRID_W, GRID_H = 4, 3  # 每张拼图网格
+MOCK = False
 
 
 def load_image(images_root: Path, rel_path: str):
@@ -43,38 +47,37 @@ def render_sheet(imgs, titles, out_path: Path, cell_w=256, cell_h=256):
     sheet.save(out_path)
 
 
-def build_contact_sheets(clusters_path: Path, out_dir: Path,
+def build_contact_sheets(pilot_path: Path, out_dir: Path,
                          images_root: Path, mock: bool = False,
-                         min_size: int = 1, max_sheets: int = 200):
+                         max_sheets: int = 200):
     global MOCK
     MOCK = mock
-    df = pd.read_csv(clusters_path)
-    groups = df[df["cluster"] >= 0].groupby("cluster")
+    df = pd.read_csv(pilot_path)
+    df["session_id"] = df["session_id"].astype(str)
+    groups = df.groupby("individual_id")  # Anchor 组标识（非个体 ID）
 
     out_dir.mkdir(parents=True, exist_ok=True)
     n_sheets = 0
-    for cluster_id, sub in groups:
-        if len(sub) < min_size:
-            continue
-        sub = sub.sort_values("cluster_probability", ascending=False)
+    for gid, sub in groups:
+        sub = sub.sort_values("sequence_guess", na_position="last")
         imgs = [load_image(images_root, p) for p in sub["relative_path"]]
-        titles = [f"{r['image_id']} {r['individual_id']}" for _, r in sub.iterrows()]
-        render_sheet(imgs, titles, out_dir / f"cluster_{cluster_id:03d}.jpg")
+        titles = [f"{r['session_id']}/{r['group_id']} {r['filename']}" for _, r in sub.iterrows()]
+        render_sheet(imgs, titles, out_dir / f"anchor_{gid.replace('/', '_')}.jpg")
         n_sheets += 1
         if n_sheets >= max_sheets:
             break
-    print(f"拼图: {n_sheets} 张 → {out_dir}")
+    print(f"拼图（Anchor 组）: {n_sheets} 张 → {out_dir}")
+    print("注：Anchor 组是代表照片候选分组，非已确认个体身份")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="按聚类簇生成人工核验拼图")
+    parser = argparse.ArgumentParser(description="按 Anchor 组生成人工核验拼图")
     base = Path(__file__).resolve().parents[1] / "outputs"
-    parser.add_argument("--clusters", type=Path, default=base / "clusters" / "clusters.csv")
+    parser.add_argument("--pilot", type=Path, default=base / "pilot" / "pilot_set.csv")
     parser.add_argument("--out", type=Path, default=base / "contact_sheets")
     parser.add_argument("--images-root", type=Path, default=Path("I:/"))
     parser.add_argument("--mock", action="store_true", help="占位图验证布局")
-    parser.add_argument("--min-size", type=int, default=2, help="少于该规模的簇不输出拼图")
     parser.add_argument("--max-sheets", type=int, default=200)
     args = parser.parse_args()
-    build_contact_sheets(args.clusters, args.out, args.images_root,
-                         args.mock, args.min_size, args.max_sheets)
+    build_contact_sheets(args.pilot, args.out, args.images_root,
+                         args.mock, args.max_sheets)

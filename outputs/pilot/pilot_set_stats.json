@@ -1,17 +1,16 @@
 {
-  "total": 406,
-  "labeled_images": 199,
-  "loose_known_images": 207,
-  "individual_count": 43,
-  "single_image_individuals": 15,
-  "multi_image_individuals": 28,
-  "max_images_per_individual": 27,
+  "total": 199,
+  "n_anchor_groups": 43,
+  "single_image_groups": 15,
+  "multi_image_groups": 28,
+  "max_images_per_group": 27,
   "session_distribution": {
-    "3": 314,
-    "1": 92
+    "03": 166,
+    "01": 33
   },
   "quality_band_distribution": {
-    "70_79": 223,
-    "80_and_above": 183
-  }
+    "80_and_above": 183,
+    "70_79": 16
+  },
+  "note": "仅含高分目录子文件夹照片（Anchor）。散图（loose_known）暂不纳入。individual_id 是 Anchor 组标识，非已确认个体 ID。"
 }

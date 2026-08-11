@@ -84,6 +84,11 @@ def extract_embeddings(pilot_csv: Path, images_root: Path, model_name: str,
     print(f"提取 {len(df)} 张 → embeddings.npy {embeddings.shape} (L2 归一化)")
     if errors:
         print(f"警告: {len(errors)} 张图片读取失败: {errors[:3]}")
+        # 读取失败的图片 embedding 为 0 向量（L2 归一化后被置为 1.0 保留），
+        # 若数量不小静默输出将污染检索结果——直接失败，便于及时修复路径问题
+        raise SystemExit(
+            f"FATAL: {len(errors)} 张图片读取失败（禁止静默产出 0 向量 embedding）。"
+            f"请检查 images_root 与 relative_path 是否含会话根前缀。示例: {errors[0][1]}")
 
     # 写入实验记录，便于回溯
     with open(out_dir / "embedding_config.json", "w", encoding="utf-8") as f:

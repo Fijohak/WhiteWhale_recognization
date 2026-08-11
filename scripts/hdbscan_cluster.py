@@ -1,7 +1,13 @@
 """
-HDBSCAN 候选聚类。
-对 embedding 做 HDBSCAN 聚类（允许噪声点），聚类结果与 labeled 个体对照，
-用于判断：聚类是否按个体分开，还是按拍摄批次/背景分开（基线诊断输入之一）。
+HDBSCAN 候选聚类（辅助工具，方向调整后降为辅助）。
+
+数据语义（2026-08-11 确认）：目录不直接等于个体 ID。本脚本仅对 embedding 做
+HDBSCAN 聚类（允许噪声点），输出 **Candidate Cluster**（候选分组，仅供人工审核
+参考），**不得直接当作真实个体**。聚类结果与 Anchor 组标识对照，用于诊断特征
+是否按拍摄批次/背景分组（基线诊断输入之一）。
+
+注意：输入 pilot_set.csv 现仅含高分 Anchor 照片（199 张），`individual_id` 为
+Anchor 组标识（非已确认个体身份）。
 """
 import argparse
 import json
@@ -33,15 +39,15 @@ def hdbscan_cluster(embeddings_path: Path, meta_path: Path, pilot_path: Path,
     df["cluster"] = labels
     df["cluster_probability"] = clusterer.probabilities_
 
-    # 集群统计
+    # 簇统计：簇内涉及的 Anchor 组标识与 session（仅对照用，不代表个体身份）
     cluster_stats = {}
     for c in sorted(set(labels)):
         sub = df[df["cluster"] == c]
         cluster_stats[int(c)] = {
             "size": len(sub),
-            "labeled_individuals": sorted(sub[sub["individual_id"] != "loose_unknown"]["individual_id"].unique().tolist()),
+            "anchor_groups": sorted(sub["individual_id"].unique().tolist()),
             "sessions": sorted(sub["session_id"].unique().tolist()),
-            "noise_ratio": None,
+            "note": "Candidate Cluster：仅供人工审核参考，不是真实个体。",
         }
     # 噪声比例（-1 为噪声）
     noise = df[df["cluster"] == -1]
@@ -52,6 +58,7 @@ def hdbscan_cluster(embeddings_path: Path, meta_path: Path, pilot_path: Path,
         "noise_ratio": float(len(noise) / len(df)),
         "min_cluster_size": min_cluster_size,
         "cluster_stats": cluster_stats,
+        "note": "HDBSCAN 为辅助工具，结果只能叫 Candidate Cluster。",
     }
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -59,13 +66,13 @@ def hdbscan_cluster(embeddings_path: Path, meta_path: Path, pilot_path: Path,
     with open(out_dir / "cluster_stats.json", "w", encoding="utf-8") as f:
         json.dump(stats, f, ensure_ascii=False, indent=2)
 
-    print(f"HDBSCAN: {len(df)} 张 → {stats['n_clusters']} 簇 + 噪声 {stats['n_noise']} 张"
+    print(f"HDBSCAN（辅助）: {len(df)} 张 → {stats['n_clusters']} 候选簇 + 噪声 {stats['n_noise']} 张"
           f"（{stats['noise_ratio']:.1%}）")
     print(f"  → {out_dir / 'clusters.csv'}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="HDBSCAN 候选聚类")
+    parser = argparse.ArgumentParser(description="HDBSCAN 候选聚类（辅助，输出仅供人工审核）")
     base = Path(__file__).resolve().parents[1] / "outputs"
     parser.add_argument("--embeddings", type=Path, default=base / "embeddings" / "embeddings.npy")
     parser.add_argument("--meta", type=Path, default=base / "embeddings" / "embeddings_meta.csv")
