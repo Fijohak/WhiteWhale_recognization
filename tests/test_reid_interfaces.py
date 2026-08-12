@@ -145,5 +145,51 @@ class TestSplitQueryGallery(unittest.TestCase):
         self.assertEqual(len(g), 4)  # 4+2-2=4 张进 gallery
 
 
+class TestContactSheets(unittest.TestCase):
+    """人工审核拼图：候选簇分组 + 噪声单独提示。"""
+
+    def _clusters_df(self):
+        return pd.DataFrame({
+            "image_id": [f"img{i}" for i in range(9)],
+            "relative_path": [f"01/0{i}/a.jpg" for i in range(9)],
+            "filename": [f"a{i}.jpg" for i in range(9)],
+            "session_id": ["1"] * 9,
+            "group_id": ["1.0"] * 9,
+            "sequence_guess": ["s"] * 9,
+            "cluster": [0] * 3 + [1] * 3 + [-1] * 3,
+            "cluster_probability": [0.9] * 9,
+        })
+
+    def test_cluster_mode_outputs(self):
+        """每个候选簇一张拼图 + 噪声一张（-1 不强制并入任何簇）。"""
+        from scripts.contact_sheets import build_cluster_contact_sheets
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv = Path(tmp) / "clusters.csv"
+            self._clusters_df().to_csv(csv, index=False)
+            out = Path(tmp) / "sheets"
+            build_cluster_contact_sheets(csv, out, Path("I:/"), mock=True)
+            files = sorted(p.name for p in out.glob("*.jpg"))
+            self.assertEqual(files, ["cluster_000.jpg", "cluster_001.jpg", "noise.jpg"])
+            # 噪声与候选簇分属不同文件（-1 合法噪声，不强制分配）
+            self.assertNotIn("cluster_002.jpg", files)
+
+    def test_load_review_paths_traceable(self):
+        """审核数据集必须能从 relative_path 还原绝对路径（可追溯原图）。"""
+        from scripts.fiftyone_review import load_review_dataset
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv = Path(tmp) / "clusters.csv"
+            self._clusters_df().to_csv(csv, index=False)
+            root = Path("I:/")
+            df = load_review_dataset(csv, root)
+            self.assertEqual(len(df), 9)
+            # 绝对路径 = 图片根 + 相对路径（Windows 分隔符兼容）
+            self.assertTrue(
+                df["source_path"].iloc[0].startswith(str(root))
+            )
+            self.assertIn("01/00/a.jpg", df["source_path"].iloc[0].replace("\\", "/"))
+
+
 if __name__ == "__main__":
     unittest.main()
