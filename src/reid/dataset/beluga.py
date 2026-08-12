@@ -69,4 +69,7 @@ class BelugaTestAdapter(DatasetAdapter):
             })
 
         df = pd.DataFrame(rows)
+        # 官方 meta 存在重复行（如 test0007 出现两次）：同图去重，避免
+        # 检索/评估把同图当独立样本（image_path 由 image_id 决定，重复行同路径）
+        df = df.drop_duplicates(subset="image_id")
         return self._normalize(df)

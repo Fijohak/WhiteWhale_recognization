@@ -99,6 +99,51 @@ class TestMetrics(unittest.TestCase):
         ap = mean_average_precision(scores, idx, q_ids, g_ids)
         self.assertAlmostEqual(ap, (1 / 1 + 2 / 3) / 2)
 
+    def test_gt_sets_ignores_same_identity(self):
+        """官方匹配对模式：同身份的其他图不算正样本（防自匹配虚高）。"""
+        scores = np.array([[1.0, 0.5, 0.4], [0.9, 0.8, 0.7]])
+        idx = np.array([[0, 1, 2], [0, 1, 2]])
+        # q0 与 g0/g1 同身份，但官方正样本只有 g0
+        # q1 官方正样本只有 g2（g1 同身份但不是正样本）
+        gt_sets = [{0}, {2}]
+        r = recall_at_k(scores, idx, None, None, k_list=(1, 2, 3), gt_sets=gt_sets)
+        self.assertEqual(r[1], 0.5)   # 仅 q0 命中（q1 的 g2 在第 3 位）
+        self.assertEqual(r[3], 1.0)
+        ap = mean_average_precision(scores, idx, None, None, gt_sets=gt_sets)
+        # q0: AP=1/1；q1: AP=1/3 → mean=(1+1/3)/2
+        self.assertAlmostEqual(ap, (1.0 + 1 / 3) / 2)
+
+    def test_gt_sets_unknown_db_id_ignored(self):
+        """正样本指向 gallery 外（db_index 缺失）时安全忽略。"""
+        scores = np.array([[0.9, 0.8]])
+        idx = np.array([[0, 1]])
+        # gt 指向索引 5（gallery 只有 2 个）
+        r = recall_at_k(scores, idx, None, None, k_list=(1, 2), gt_sets=[{5}])
+        self.assertEqual(r[1], 0.0)
+        self.assertEqual(r[2], 0.0)
+        ap = mean_average_precision(scores, idx, None, None, gt_sets=[{5}])
+        self.assertEqual(ap, 0.0)
+
+
+class TestSplitQueryGallery(unittest.TestCase):
+    """query/gallery 划分防泄漏（同 identity 不共用同图）。"""
+
+    def test_split_never_share_image(self):
+        from scripts.pub_reid_benchmark import split_query_gallery
+
+        df = pd.DataFrame({"identity": ["a"] * 4 + ["b"] * 2 + ["c"] * 1})
+        df["image_path"] = [f"img{i}.jpg" for i in range(len(df))]
+        q, g = split_query_gallery(df, identity_col="identity")
+        # 每身份至少 2 张才参与；c 只有 1 张 → 不参与
+        self.assertEqual(sorted(q["identity"].unique()), ["a", "b"])
+        # 同身份 query 与 gallery 不共用同图
+        for iid in ["a", "b"]:
+            qi = set(q[q["identity"] == iid].index)
+            gi = set(g[g["identity"] == iid].index)
+            self.assertEqual(len(qi), 1)
+            self.assertTrue(qi.isdisjoint(gi))
+        self.assertEqual(len(g), 4)  # 4+2-2=4 张进 gallery
+
 
 if __name__ == "__main__":
     unittest.main()

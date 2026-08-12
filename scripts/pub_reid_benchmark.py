@@ -118,7 +118,9 @@ def main():
     parser = argparse.ArgumentParser(description="主路线 A：公开数据 zero-shot Re-ID")
     parser.add_argument("--dataset", choices=["happywhale", "beluga"], default="happywhale")
     parser.add_argument("--model", choices=["megadescriptor", "dinov2"], default="megadescriptor")
-    parser.add_argument("--data-root", type=Path, default=Path("D:/dolphin_data/happywhale"))
+    parser.add_argument("--data-root", type=Path,
+                        default=Path("D:/dolphin_data/happywhale"),
+                        help="数据目录（beluga 数据集请传 D:/dolphin_data/beluga）")
     parser.add_argument("--cache-images", action="store_true",
                         help="把 parquet 内嵌图片落盘到 data-root/images（首次运行用）")
     parser.add_argument("--out", type=Path,
@@ -208,13 +210,33 @@ def main():
         data = BelugaTestAdapter().load(args.data_root)
         q_list, g_list = load_beluga_scenarios(args.data_root)
 
+        # 官方 GT 匹配对（private_test_labels.csv）：
+        # query_id 格式 scenarioXX-testNNNN，database_image_id 是正样本图。
+        # 协议：同身份的其他图不算正样本，只认官方匹配对（防自匹配虚高）。
+        import zipfile
+
+        with zipfile.ZipFile(args.data_root / "beluga-id-test.zip") as z:
+            labels = pd.read_csv(z.open("private_test_labels.csv"))
+        labels["query_id"] = labels["query_id"].astype(str)
+        labels["database_image_id"] = labels["database_image_id"].astype(str)
+        db_index = {id_: i for i, id_ in enumerate(data.df["image_id"].tolist())}
+
         model = load_model(args.model, args.mock)
         rng = np.random.default_rng(42)
         results = []
         for i, (q_rows, g_rows) in enumerate(zip(q_list, g_list), start=1):
+            scen = f"scenario{i:02d}"
+            # 每行的 query_image_id 即 query（官方定义：每行一条 query）
+            q_ids = q_rows["image_id"].astype(str).tolist()
             # 排除 query 自身图（Beluga 协议：query 在 database 内）
-            g_self = g_rows["image_id"].isin(q_rows["image_id"]).to_numpy()
-            g_safe = g_rows[~g_self]
+            g_safe = g_rows[~g_rows["image_id"].isin(q_ids)].reset_index(drop=True)
+            # 官方正样本：labels 里 (scenarioXX-testNNNN -> db 图) 的 db 索引
+            lab = labels[labels["query_id"] == f"{scen}-{q_ids[0]}"][["database_image_id"]]
+            gt = {}
+            for qid in q_ids:
+                db_ids = labels.loc[
+                    labels["query_id"] == f"{scen}-{qid}", "database_image_id"]
+                gt[qid] = {db_index[d] for d in db_ids if d in db_index}
             if model is None:
                 q_emb = mock_encode(len(q_rows), 768, rng)
                 g_emb = mock_encode(len(g_safe), 768, rng)
@@ -222,14 +244,13 @@ def main():
                 q_emb = model.encode_paths(q_rows["image_path"].tolist())
                 g_emb = model.encode_paths(g_safe["image_path"].tolist())
             scores, idx = cosine_topk(q_emb, g_emb, k=args.k)
-            q_ids = q_rows["identity"].values
-            g_ids = g_safe["identity"].values
-            rec = recall_at_k(scores, idx, q_ids, g_ids, k_list=(1, 5, 10))
-            ap = mean_average_precision(scores, idx, q_ids, g_ids)
-            results.append({"scenario": f"scenario{i:02d}", "n_query": len(q_rows),
+            gt_sets = [gt[qid] for qid in q_ids]
+            rec = recall_at_k(scores, idx, None, None, k_list=(1, 5, 10), gt_sets=gt_sets)
+            ap = mean_average_precision(scores, idx, None, None, gt_sets=gt_sets)
+            results.append({"scenario": scen, "n_query": len(q_rows),
                             "n_gallery": len(g_safe), "recall@1": rec[1],
                             "recall@5": rec[5], "recall@10": rec[10], "mAP": ap})
-            print(f"[scenario{i:02d}] query={len(q_rows)} gallery={len(g_safe)} "
+            print(f"[{scen}] query={len(q_rows)} gallery={len(g_safe)} "
                   f"Recall@1={rec[1]:.3f} Recall@5={rec[5]:.3f} "
                   f"Recall@10={rec[10]:.3f} mAP={ap:.3f}")
         summary = pd.DataFrame(results)

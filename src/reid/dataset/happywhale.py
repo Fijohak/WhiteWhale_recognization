@@ -36,7 +36,10 @@ class HappywhaleAdapter(DatasetAdapter):
 
     def load(self, data_root: str | None = None) -> ReIDData:
         data_root = Path(data_root) if data_root else Path("D:/dolphin_data/happywhale")
-        parquet_files = sorted(data_root.glob("*.parquet"))
+        # 过滤 .part 等未下载完成的分片（避免读到损坏文件）
+        parquet_files = sorted(
+            f for f in data_root.glob("*.parquet")
+            if not f.name.endswith((".part", ".tmp")))
         if not parquet_files:
             raise FileNotFoundError(f"{data_root} 下没有 parquet 文件")
 
