@@ -70,7 +70,16 @@
 | 模型 | 来源 | 通道 | 状态 |
 |---|---|---|---|
 | MegaDescriptor-T-224 | hf-hub:BVRA/MegaDescriptor-T-224 | hf-mirror（HF_ENDPOINT） | ✅ 已用 |
-| DINOv2 ViT-B/14 | facebookresearch/dinov2 | 待接入（需 github 或 hf 权重） | 待用 |
+| DINOv2 ViT-B/14 | facebookresearch/dinov2 官方权重 | 本地 .pth：`D:\dolphin_data\dinov2_weights\dinov2_vitb14_pretrain.pth`（官方 pth 与 timm 键 174/174 匹配，仅多 mask_token，加载时剔除） | ✅ 已用（离线加载） |
+
+### 网络通道实测（2026-08-12）
+
+- **HF 系域名全部 TLS 握手失败**：huggingface.co / hf-mirror.com / cdn-lfs.huggingface.co（直连 + 代理 127.0.0.1:7890 均 exit 35）
+- **可用通道**：
+  - GitHub（经代理 7890）✅
+  - `dl.fbaipublicfiles.com`（Facebook 官方 CDN，经代理 7890）✅ 用于下载 DINOv2 官方权重
+  - modelscope.cn ✅（备用，未用）
+- timm 权重加载需离线模式：`HF_HUB_OFFLINE=1`（缓存完整时跳过 HEAD 校验）
 
 ---
 

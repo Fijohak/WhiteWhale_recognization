@@ -33,12 +33,17 @@ class EmbeddingModel(ABC):
     def encode(self, images: list[Image.Image]) -> np.ndarray:
         """输入 PIL 图片列表，返回 L2 归一化 embedding (N, D) float32。"""
 
-    def encode_paths(self, paths: list[Path | str]) -> np.ndarray:
-        """从路径批量提取（逐个读图，失败即抛错）。"""
-        imgs = []
-        for p in paths:
-            imgs.append(Image.open(p).convert("RGB"))
-        return self.encode(imgs)
+    def encode_paths(self, paths: list[Path | str], batch_size: int = 32) -> np.ndarray:
+        """从路径批量提取（分批读图避免整批驻留内存，失败即抛错）。
+
+        batch_size: 每批读入的图片数；GPU/大图集可调小控制内存峰值。
+        """
+        outs = []
+        for i in range(0, len(paths), batch_size):
+            batch_paths = paths[i:i + batch_size]
+            imgs = [Image.open(p).convert("RGB") for p in batch_paths]
+            outs.append(self.encode(imgs))
+        return np.concatenate(outs, axis=0)
 
 
 class _HFImageModel(EmbeddingModel):
@@ -78,23 +83,50 @@ class _HFImageModel(EmbeddingModel):
 class DINOv2Adapter(_HFImageModel):
     """DINOv2 通用自监督视觉表征（主路线 A 对照组）。
 
-    通过 timm 加载（vit_base_patch14_dinov2.lvd142m = 官方 DINOv2 权重），
-    权重经 hf-mirror 通道下载（与 MegaDescriptor 一致）。
+    权重来源二选一：
+    - 默认 timm 在线下载（vit_base_patch14_dinov2.lvd142m = 官方权重转换，
+      走 HF 通道）；网络不可用时传 weight_path 加载官方 .pth（离线）。
+    官方权重键与 timm 模型 174/174 匹配，仅多一个预训练用的 mask_token。
+
+    注意：模型默认固定 518x518（官方推荐分辨率，pos_embed 训练尺寸匹配），
+    不使用 224 输入（224 需插值 pos_embed 且损失空间信息）。
     """
 
     name = "dinov2"
-    input_size = 224
+    input_size = 518
     feat_dim = 768
+
+    def __init__(self, device: str = "auto", weight_path: str | None = None):
+        self.weight_path = weight_path
+        super().__init__(device)
 
     def _load(self):
         import timm
 
         self.model = timm.create_model(
-            "vit_base_patch14_dinov2.lvd142m", pretrained=True, num_classes=0)
+            "vit_base_patch14_dinov2.lvd142m",
+            pretrained=self.weight_path is None, num_classes=0)
+        if self.weight_path:
+            self._load_official_weight()
         self.model.eval()
         if self.device.type == "cuda":
             self.model = self.model.to(self.device)
         self.feat_dim = self.model.num_features
+
+    def _load_official_weight(self):
+        """加载 facebookresearch/dinov2 官方 .pth（离线）。
+
+        官方权重含预训练任务键 mask_token，timm 模型无此键 → 剔除。
+        """
+        import torch
+
+        sd = torch.load(self.weight_path, map_location="cpu")
+        sd = sd.get("model", sd)
+        sd = {k: v for k, v in sd.items() if k in self.model.state_dict()}
+        missing, unexpected = self.model.load_state_dict(sd, strict=False)
+        if missing:
+            raise ValueError(f"DINOv2 权重加载不完整，缺 {len(missing)} 个键: "
+                             f"{sorted(missing)[:5]}")
 
 
 class MegaDescriptorAdapter(_HFImageModel):

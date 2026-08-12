@@ -31,14 +31,14 @@ from src.reid.evaluation.metrics import mean_average_precision, recall_at_k  # n
 from src.reid.retrieval.cosine import cosine_topk  # noqa: E402
 
 
-def load_model(name: str, mock: bool):
+def load_model(name: str, mock: bool, dinov2_weight: str | None = None):
     """按名字实例化模型；mock 返回 None 表示随机特征模式。"""
     if mock or name == "mock":
         return None
     if name == "megadescriptor":
         return MegaDescriptorAdapter()
     if name == "dinov2":
-        return DINOv2Adapter()
+        return DINOv2Adapter(weight_path=dinov2_weight)
     raise ValueError(f"未知模型: {name}")
 
 
@@ -130,6 +130,8 @@ def main():
     parser.add_argument("--max-query", type=int, default=0,
                         help="限制 query 数（0=全部；调试用）")
     parser.add_argument("--mock", action="store_true", help="离线验证模式（随机特征）")
+    parser.add_argument("--dinov2-weight", type=str, default=None,
+                        help="DINOv2 官方权重 .pth 本地路径（网络不可用时离线加载）")
     args = parser.parse_args()
 
     out_dir = args.out / args.dataset
@@ -154,7 +156,7 @@ def main():
               f"query {len(q_df)} / gallery {len(g_df)}")
 
         # 3. 特征
-        model = load_model(args.model, args.mock)
+        model = load_model(args.model, args.mock, dinov2_weight=args.dinov2_weight)
         rng = np.random.default_rng(42)
         if model is None:
             print("[model] MOCK 随机特征（离线验证模式）")
@@ -162,8 +164,8 @@ def main():
             g_emb = mock_encode(len(g_df), 768, rng)
         else:
             print(f"[model] {model.name} ({model.feat_dim}D)")
-            q_emb = model.encode_paths(q_df["image_path"].tolist())
-            g_emb = model.encode_paths(g_df["image_path"].tolist())
+            q_emb = model.encode_paths(q_df["image_path"].tolist(), batch_size=args.batch_size)
+            g_emb = model.encode_paths(g_df["image_path"].tolist(), batch_size=args.batch_size)
 
         # 4. 检索 + 评估（无自匹配问题：query 不在 gallery）
         scores, idx = cosine_topk(q_emb, g_emb, k=args.k)
@@ -221,7 +223,7 @@ def main():
         labels["database_image_id"] = labels["database_image_id"].astype(str)
         db_index = {id_: i for i, id_ in enumerate(data.df["image_id"].tolist())}
 
-        model = load_model(args.model, args.mock)
+        model = load_model(args.model, args.mock, dinov2_weight=args.dinov2_weight)
         rng = np.random.default_rng(42)
         results = []
         for i, (q_rows, g_rows) in enumerate(zip(q_list, g_list), start=1):
@@ -241,8 +243,8 @@ def main():
                 q_emb = mock_encode(len(q_rows), 768, rng)
                 g_emb = mock_encode(len(g_safe), 768, rng)
             else:
-                q_emb = model.encode_paths(q_rows["image_path"].tolist())
-                g_emb = model.encode_paths(g_safe["image_path"].tolist())
+                q_emb = model.encode_paths(q_rows["image_path"].tolist(), batch_size=args.batch_size)
+                g_emb = model.encode_paths(g_safe["image_path"].tolist(), batch_size=args.batch_size)
             scores, idx = cosine_topk(q_emb, g_emb, k=args.k)
             gt_sets = [gt[qid] for qid in q_ids]
             rec = recall_at_k(scores, idx, None, None, k_list=(1, 5, 10), gt_sets=gt_sets)
