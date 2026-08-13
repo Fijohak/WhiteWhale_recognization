@@ -755,3 +755,46 @@ chinese-white-dolphin-reid/
 ```
 
 项目最终定位不是完全自动化的身份判定工具，而是一个辅助研究人员整理照片、发现候选匹配、减少人工检索工作量的白海豚个体识别系统。
+
+---
+
+## 20. 离线查询客户端
+
+本地 Web 小工具（`scripts/query_app.py` + `scripts/query_app.html`）：上传一张背鳍照片，对全部 gallery 特征做 Top-K 检索，输出三态判定。
+
+### 20.1 功能
+
+* 上传照片 → 提取特征 → 全库 Top-K 检索（默认 MegaDescriptor，也可用 DINOv2）；
+* 三态判定（固定阈值，默认 0.45）：
+  * `known`：最高相似度 ≥ 阈值，展示 Top-K 候选（仍需人工核验）；
+  * `unknown`：最高相似度 < 阈值，提示"疑似未知个体（可能新个体）"，仍返回 Top-K 供参考；
+* 候选展示：缩略图 + 相似度 + 来源（source_group / session / quality / cluster）；
+* 所有候选一律标注"待人工核验"，不自动判定身份；
+* 模型匹配防护：查询模型必须与 gallery 特征同模型（MegaDescriptor 与 DINOv2 均为 768D 但分布不同，不可直接比较）。
+
+### 20.2 用法
+
+```bash
+pip install fastapi uvicorn python-multipart
+python scripts/query_app.py --port 8000
+# 浏览器打开 http://127.0.0.1:8000
+```
+
+参数：
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `--embeddings` | `outputs/embeddings/embeddings.npy` | gallery 特征 |
+| `--meta` / `--pilot` | `outputs/embeddings/…` / `outputs/pilot/pilot_set.csv` | 追溯字段 |
+| `--images-root` | `I:/` | 源图根目录（候选缩略图用） |
+| `--model` | `megadescriptor` | `megadescriptor` / `dinov2` |
+| `--dinov2-weight` | 无 | DINOv2 官方权重 .pth（`--model dinov2` 时必填） |
+| `--threshold` | `0.45` | known / unknown 判定阈值 |
+| `--k` | `10` | 返回候选数 |
+| `--host` / `--port` | `127.0.0.1` / `8000` | 监听地址 |
+
+> 注意：gallery 特征必须与查询模型同源。若用 DINOv2 查询，需先用 DINOv2 重新提取 gallery 特征（`embedding_config.json` 会记录模型名，启动时自动校验）。
+
+### 20.3 语义约束
+
+与项目其余部分一致：检索结果是 Candidate（候选），人工核验后才能称为个体；`unknown` 分支提示的是"疑似新个体"，不自动入库；所有候选保留 image_id / source_group / session / quality 追溯字段。
