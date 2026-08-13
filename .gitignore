@@ -17,3 +17,9 @@ data/
 # 临时与日志
 *.log
 .DS_Store
+
+# 生成物与工作区（可重新生成；本地保留，不入库）
+outputs/*
+!outputs/.gitkeep
+projects/
+scripts/archive/

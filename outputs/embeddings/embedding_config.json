@@ -1,9 +1,0 @@
-{
-  "model": "hf-hub:BVRA/MegaDescriptor-T-224",
-  "mock": false,
-  "device": "cuda",
-  "feat_dim": 768,
-  "batch_size": 16,
-  "images_root": "I:\\",
-  "n": 199
-}
