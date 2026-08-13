@@ -776,7 +776,7 @@ chinese-white-dolphin-reid/
 
 ```bash
 pip install fastapi uvicorn python-multipart
-python scripts/query_app.py --port 8000
+python src/query_app.py --port 8000
 # 浏览器打开 http://127.0.0.1:8000
 ```
 

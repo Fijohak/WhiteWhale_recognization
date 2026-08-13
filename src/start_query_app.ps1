@@ -23,8 +23,8 @@ if (-not $python) {
 }
 
 # 2) 后台启动服务（最小化窗口，日志留在该窗口）
-Write-Host "[1/2] 启动查询服务：python scripts/query_app.py --port $Port ..."
-$proc = Start-Process python -ArgumentList "scripts/query_app.py", "--port", "$Port" `
+Write-Host "[1/2] 启动查询服务：python src/query_app.py --port $Port ..."
+$proc = Start-Process python -ArgumentList "src/query_app.py", "--port", "$Port" `
     -WorkingDirectory $root -WindowStyle Minimized -PassThru
 
 # 3) 轮询端口就绪（最多 60 秒，模型首次加载需数秒）

@@ -27,8 +27,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.reid.evaluation.metrics import mean_average_precision, recall_at_k  # noqa: E402
-from src.reid.retrieval.cosine import cosine_topk  # noqa: E402
+from src.model.reid.evaluation.metrics import mean_average_precision, recall_at_k  # noqa: E402
+from src.model.reid.retrieval.cosine import cosine_topk  # noqa: E402
 
 
 def load_data(embeddings: Path, meta: Path, pilot: Path) -> tuple[np.ndarray, pd.DataFrame]:

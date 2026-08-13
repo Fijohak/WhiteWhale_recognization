@@ -23,7 +23,7 @@ from pathlib import Path
 import pandas as pd
 from PIL import Image
 
-from src.reid.dataset.base import DatasetAdapter, ReIDData
+from src.model.reid.dataset.base import DatasetAdapter, ReIDData
 
 
 class HappywhaleAdapter(DatasetAdapter):

@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.reid.dataset.base import DatasetAdapter, ReIDData
+from src.model.reid.dataset.base import DatasetAdapter, ReIDData
 
 
 class BelugaTestAdapter(DatasetAdapter):
