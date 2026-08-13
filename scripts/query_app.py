@@ -98,7 +98,7 @@ def build_app(args, embedder=None) -> FastAPI:
 
     # 本地离线工具：权重从本地缓存加载（HF_HUB_OFFLINE=1），不访问外网。
     # 缓存缺失时 timm 会给出明确的权重找不到错误。
-    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("HF_HUB_OFFLINE", "1") # 坏事做尽！！！
 
     # 模型：默认 MegaDescriptor（与 gallery 特征一致）；dinov2 需显式传权重
     if embedder is not None:

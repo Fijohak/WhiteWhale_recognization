@@ -17,3 +17,7 @@ data/
 # 临时与日志
 *.log
 .DS_Store
+
+.vscode/
+
+70-79/
