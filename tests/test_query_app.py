@@ -23,7 +23,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.query_app import build_app, check_model_match  # noqa: E402
+from src.query_app import build_app, check_model_match  # noqa: E402
 
 
 class FakeEmbedder:

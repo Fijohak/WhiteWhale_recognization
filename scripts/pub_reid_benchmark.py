@@ -22,13 +22,13 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.reid.dataset.happywhale import HappywhaleAdapter  # noqa: E402
-from src.reid.embedding.base import (  # noqa: E402
+from src.model.reid.dataset.happywhale import HappywhaleAdapter  # noqa: E402
+from src.model.reid.embedding.base import (  # noqa: E402
     DINOv2Adapter,
     MegaDescriptorAdapter,
 )
-from src.reid.evaluation.metrics import mean_average_precision, recall_at_k  # noqa: E402
-from src.reid.retrieval.cosine import cosine_topk  # noqa: E402
+from src.model.reid.evaluation.metrics import mean_average_precision, recall_at_k  # noqa: E402
+from src.model.reid.retrieval.cosine import cosine_topk  # noqa: E402
 
 
 def load_model(name: str, mock: bool, dinov2_weight: str | None = None):
@@ -206,7 +206,7 @@ def main():
             }, f, indent=2, ensure_ascii=False)
 
     elif args.dataset == "beluga":
-        from src.reid.dataset.beluga import BelugaTestAdapter
+        from src.model.reid.dataset.beluga import BelugaTestAdapter
 
         # 先确保 test 图已解压
         data = BelugaTestAdapter().load(args.data_root)

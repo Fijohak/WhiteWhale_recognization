@@ -36,8 +36,8 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.reid.embedding.base import DINOv2Adapter, MegaDescriptorAdapter  # noqa: E402
-from src.reid.retrieval.cosine import cosine_topk  # noqa: E402
+from model.reid.embedding.base import DINOv2Adapter, MegaDescriptorAdapter  # noqa: E402
+from model.reid.retrieval.cosine import cosine_topk  # noqa: E402
 
 
 def load_gallery(embeddings_path: Path, meta_path: Path, pilot_path: Path):
