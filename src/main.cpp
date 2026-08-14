@@ -1,6 +1,7 @@
 #include "main.h"
 
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <utility>
@@ -364,7 +365,119 @@ int runApplication()
 
 
     // =====================================================
-    // 8.5 选择 Group Root Folder
+    // 8.5 获取右侧当前正在处理的图片路径
+    //
+    // Single -> Single 当前图片
+    // Batch  -> Batch 当前图片
+    // =====================================================
+
+    auto getCurrentProcessImage =
+        [&]() -> std::filesystem::path
+    {
+        const ProcessMode mode =
+            mainUi.getProcessMode();
+
+
+        if (
+            mode ==
+            ProcessMode::Single
+        )
+        {
+            return
+                processManager.getSinglePath();
+        }
+
+
+        if (
+            mode ==
+            ProcessMode::Batch
+        )
+        {
+            return
+                processManager.getBatchPath();
+        }
+
+
+        return {};
+    };
+
+
+    // =====================================================
+    // 8.6 Confirm 当前图片
+    //
+    // 把右侧当前图片复制到顶部当前选择的 Group。
+    // 如果没有 Group Root 或没有当前图片，则什么都不做。
+    // =====================================================
+
+    auto confirmCurrentImage =
+        [&]()
+    {
+        if (
+            groupManager.getRootPath().empty()
+        )
+        {
+            return;
+        }
+
+
+        const std::filesystem::path imagePath =
+            getCurrentProcessImage();
+
+
+        if (imagePath.empty())
+        {
+            return;
+        }
+
+
+        const int groupIndex =
+            mainUi.getActiveGroup();
+
+
+        const GroupInfo* group =
+            groupManager.getGroup(
+                groupIndex
+            );
+
+
+        if (group == nullptr)
+        {
+            return;
+        }
+
+
+        if (
+            !groupManager.copyImageToGroup(
+                groupIndex,
+                imagePath
+            )
+        )
+        {
+            std::cerr
+                << "Failed to confirm image: "
+                << groupManager.getLastError()
+                << '\n';
+
+            return;
+        }
+
+
+        // 刷新左侧当前 Group，
+        // 让刚复制进去的图片立即出现。
+        loadGroup(
+            groupIndex
+        );
+
+
+        std::cout
+            << "Image copied to group "
+            << groupIndex + 1
+            << '\n';
+    };
+
+
+    // =====================================================
+    // 8.7 选择 Group Root Folder
     // =====================================================
 
     uiEvents.onSelectGroupFolder =
@@ -377,7 +490,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.6 重新选择 Group Root Folder
+    // 8.8 重新选择 Group Root Folder
     // =====================================================
 
     uiEvents.onReselectGroupFolder =
@@ -391,7 +504,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.7 点击顶部 Group
+    // 8.9 点击顶部 Group
     // =====================================================
 
     uiEvents.onGroupClick =
@@ -404,7 +517,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.8 点击左侧图片
+    // 8.10 点击左侧图片
     //
     // 暂时只保留接口
     // =====================================================
@@ -442,7 +555,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.9 Single - Select Image
+    // 8.11 Single - Select Image
     // =====================================================
 
     uiEvents.onPickSingle =
@@ -455,7 +568,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.10 Single - Drop Image
+    // 8.12 Single - Drop Image
     // =====================================================
 
     uiEvents.onSingleDrop =
@@ -485,7 +598,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.11 Single - Confirm
+    // 8.13 Single - Confirm
     //
     // 暂时只保留接口
     // =====================================================
@@ -493,17 +606,12 @@ int runApplication()
     uiEvents.onSingleConfirm =
         [&]()
     {
-        // ======================================
-        // TODO:
-        //
-        // Single Confirm
-        //
-        // ======================================
+        confirmCurrentImage();
     };
 
 
     // =====================================================
-    // 8.12 Batch - Select Folder
+    // 8.14 Batch - Select Folder
     // =====================================================
 
     uiEvents.onPickFolder =
@@ -516,7 +624,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.13 Batch - Previous
+    // 8.15 Batch - Previous
     // =====================================================
 
     uiEvents.onBatchPrev =
@@ -540,7 +648,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.14 Batch - Next
+    // 8.16 Batch - Next
     // =====================================================
 
     uiEvents.onBatchNext =
@@ -564,7 +672,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.15 Batch - Confirm
+    // 8.17 Batch - Confirm
     //
     // 暂时只保留接口
     // =====================================================
@@ -572,17 +680,12 @@ int runApplication()
     uiEvents.onBatchConfirm =
         [&]()
     {
-        // ======================================
-        // TODO:
-        //
-        // Batch Confirm
-        //
-        // ======================================
+        confirmCurrentImage();
     };
 
 
     // =====================================================
-    // 8.16 New Category
+    // 8.18 New Category
     //
     // 暂时只保留接口
     // =====================================================
@@ -590,17 +693,77 @@ int runApplication()
     uiEvents.onNewCategory =
         [&]()
     {
-        // ======================================
-        // TODO:
-        //
-        // Create New Category
-        //
-        // ======================================
+        // 没有选择 Group Root：
+        // 按需求，什么都不做。
+        if (
+            groupManager.getRootPath().empty()
+        )
+        {
+            return;
+        }
+
+
+        const std::filesystem::path imagePath =
+            getCurrentProcessImage();
+
+
+        // 右侧没有正在处理的图片：
+        // 什么都不做。
+        if (imagePath.empty())
+        {
+            return;
+        }
+
+
+        int newGroupIndex = -1;
+
+
+        if (
+            !groupManager.createGroupWithImage(
+                imagePath,
+                newGroupIndex
+            )
+        )
+        {
+            std::cerr
+                << "Failed to create new group: "
+                << groupManager.getLastError()
+                << '\n';
+
+            return;
+        }
+
+
+        // createGroupWithImage() 已重新扫描 Root。
+        // 更新顶部 Group 数量和 Root 信息。
+        mainUi.setGroupRoot(
+            groupManager.getRootName(),
+            groupManager.getRootPath(),
+            groupManager.getGroupCount()
+        );
+
+
+        // 自动选中新建的 Group。
+        mainUi.setActiveGroup(
+            newGroupIndex
+        );
+
+
+        // 左侧立即展示新 Group。
+        loadGroup(
+            newGroupIndex
+        );
+
+
+        std::cout
+            << "New group created: "
+            << newGroupIndex + 1
+            << '\n';
     };
 
 
     // =====================================================
-    // 8.17 注册 UI Events
+    // 8.19 注册 UI Events
     // =====================================================
 
     mainUi.setEvents(

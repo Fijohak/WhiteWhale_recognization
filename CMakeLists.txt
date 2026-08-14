@@ -68,6 +68,9 @@ add_executable(ImageViewer
     src/tools/FileDialog.cpp
     src/tools/FileDialog.h
 
+    src/tools/FileUtils.cpp
+    src/tools/FileUtils.h
+
 
     # ------------------------------
     # GLAD

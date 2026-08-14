@@ -17,6 +17,10 @@ class GroupManager
 {
 public:
 
+    // ==========================================
+    // Root
+    // ==========================================
+
     bool loadRoot(
         const std::string& rootPath
     );
@@ -24,6 +28,10 @@ public:
 
     void clear();
 
+
+    // ==========================================
+    // Group
+    // ==========================================
 
     int getGroupCount() const;
 
@@ -37,6 +45,26 @@ public:
     getGroups() const;
 
 
+    // ==========================================
+    // Image Classification
+    // ==========================================
+
+    bool copyImageToGroup(
+        int groupIndex,
+        const std::filesystem::path& imagePath
+    );
+
+
+    bool createGroupWithImage(
+        const std::filesystem::path& imagePath,
+        int& newGroupIndex
+    );
+
+
+    // ==========================================
+    // Root Info
+    // ==========================================
+
     const std::string&
     getRootPath() const;
 
@@ -47,6 +75,13 @@ public:
 
     const std::string&
     getLastError() const;
+
+
+private:
+
+    int findGroupIndex(
+        const std::filesystem::path& path
+    ) const;
 
 
 private:
