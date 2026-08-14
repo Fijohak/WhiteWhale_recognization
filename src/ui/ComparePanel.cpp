@@ -167,8 +167,8 @@ void ComparePanel::draw()
     // ==========================================
 
     constexpr float minCardWidth =
-        220.0f;
-
+        300.0f;
+    
 
     constexpr float gap =
         12.0f;

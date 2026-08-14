@@ -277,7 +277,7 @@ void MainUi::draw()
         10.0f;
 
     float leftWidth =
-        avail.x * 0.62f;
+        avail.x * 0.50f;
 
     leftWidth =
         std::max(
