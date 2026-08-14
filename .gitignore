@@ -27,3 +27,7 @@ outputs/*
 !outputs/.gitkeep
 projects/
 scripts/archive/
+
+# C++ 确认工具（easy-choose 分支）：构建产物与子模块内容本地保留
+build/
+external/
