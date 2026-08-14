@@ -145,3 +145,45 @@ class MegaDescriptorAdapter(_HFImageModel):
         if self.device.type == "cuda":
             self.model = self.model.to(self.device)
         self.feat_dim = self.model.num_features
+
+
+class MegaDescriptorMetricAdapter(MegaDescriptorAdapter):
+    """MegaDescriptor + 伪标签 ArcFace 微调权重（Candidate 特征）。
+
+    训练脚本 scripts/train_metric_learning.py 保存 best.pt（ReIDModel 完整
+    state_dict，含 head），此处只取 backbone 部分做特征提取。预处理与训练
+    时一致（Resize 256 + CenterCrop 224），保证查询特征与 gallery 同分布。
+    """
+
+    name = "megadescriptor-metric-learning-r1"
+
+    def __init__(self, ckpt_path: Path | str, device: str = "auto"):
+        self.ckpt_path = str(ckpt_path)
+        super().__init__(device)
+
+    def _load(self):
+        import torch
+
+        super()._load()
+        ckpt = torch.load(self.ckpt_path, map_location="cpu")
+        state = ckpt.get("state", ckpt)
+        # ReIDModel.state_dict 的 backbone.* → 本模型 state_dict 去前缀
+        sd = {k.removeprefix("backbone."): v for k, v in state.items()
+              if k.startswith("backbone.")}
+        missing, unexpected = self.model.load_state_dict(sd, strict=False)
+        if missing:
+            raise ValueError(f"微调权重加载不完整，缺 {len(missing)} 个键: "
+                             f"{sorted(missing)[:5]}（{self.ckpt_path}）")
+        self.model.eval()
+
+    def _preprocess(self, images: list[Image.Image]) -> torch.Tensor:
+        """与训练一致：Resize 256 → CenterCrop 224（训练时中心裁剪语义）。"""
+        import torchvision.transforms as T
+
+        tf = T.Compose([
+            T.Resize(self.input_size + 32),
+            T.CenterCrop(self.input_size),
+            T.ToTensor(),
+            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+        return torch.stack([tf(im) for im in images]).to(self.device)

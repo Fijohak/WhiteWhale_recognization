@@ -23,7 +23,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.query_app import build_app, check_model_match  # noqa: E402
+from src.query_app import build_app, resolve_model  # noqa: E402
 
 
 class FakeEmbedder:
@@ -81,7 +81,7 @@ def make_gallery(tmp: Path, n: int = 8, dim: int = 64,
         meta=tmp / "embeddings_meta.csv",
         pilot=tmp / "pilot_set.csv",
         images_root=tmp,
-        model="megadescriptor",
+        model=None,
         dinov2_weight=None,
         k=3, threshold=0.45,
     )
@@ -91,24 +91,40 @@ def make_gallery(tmp: Path, n: int = 8, dim: int = 64,
 class TestModelMatchGuard(unittest.TestCase):
     """查询模型必须与 gallery 特征同模型（维度相同也不可比）。"""
 
-    def test_mega_with_mega_ok(self):
+    def test_auto_mega_with_mega_ok(self):
+        """默认自动匹配：gallery 是 megadescriptor → 查询用 megadescriptor。"""
         with tempfile.TemporaryDirectory() as t:
             _, args = make_gallery(Path(t))
-            self.assertEqual(check_model_match(args, 4), "megadescriptor")
+            self.assertEqual(resolve_model(args, 4), "megadescriptor")
+
+    def test_auto_metric_with_metric_ok(self):
+        """gallery 是微调特征 → 自动用微调查询模型。"""
+        with tempfile.TemporaryDirectory() as t:
+            _, args = make_gallery(Path(t),
+                                   model_cfg="megadescriptor-metric-learning-r1")
+            self.assertEqual(resolve_model(args, 4), "metric-learning")
 
     def test_dinov2_with_mega_rejected(self):
         with tempfile.TemporaryDirectory() as t:
             _, args = make_gallery(Path(t))
             args.model = "dinov2"
             with self.assertRaises(SystemExit) as cm:
-                check_model_match(args, 4)
+                resolve_model(args, 4)
             self.assertIn("模型不匹配", str(cm.exception))
+
+    def test_metric_with_mega_rejected(self):
+        """微调查询模型不能配预训练 gallery（分布不同）。"""
+        with tempfile.TemporaryDirectory() as t:
+            _, args = make_gallery(Path(t))
+            args.model = "metric-learning"
+            with self.assertRaises(SystemExit):
+                resolve_model(args, 4)
 
     def test_dinov2_with_dinov2_ok(self):
         with tempfile.TemporaryDirectory() as t:
             _, args = make_gallery(Path(t), model_cfg="vit_base_patch14_dinov2.lvd142m")
             args.model = "dinov2"
-            self.assertEqual(check_model_match(args, 4), "dinov2")
+            self.assertEqual(resolve_model(args, 4), "dinov2")
 
     def test_no_config_rejected(self):
         """无 embedding_config.json 时不盲目比较，直接拒绝。"""
@@ -116,14 +132,14 @@ class TestModelMatchGuard(unittest.TestCase):
             _, args = make_gallery(Path(t))
             (Path(t) / "embedding_config.json").unlink()
             with self.assertRaises(SystemExit):
-                check_model_match(args, 4)
+                resolve_model(args, 4)
 
     def test_unknown_model_rejected(self):
         with tempfile.TemporaryDirectory() as t:
             _, args = make_gallery(Path(t))
             args.model = "resnet"
             with self.assertRaises(SystemExit):
-                check_model_match(args, 4)
+                resolve_model(args, 4)
 
 
 class TestQueryApp(unittest.TestCase):

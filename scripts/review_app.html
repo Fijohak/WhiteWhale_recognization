@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>中华白海豚个体审核</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", sans-serif; background: #f5f6f8; color: #222; }
+  header { position: sticky; top: 0; background: #1e3a5f; color: #fff; padding: 10px 20px;
+           display: flex; align-items: center; gap: 18px; flex-wrap: wrap; z-index: 10; }
+  header h1 { font-size: 17px; font-weight: 600; }
+  .progress { font-size: 13px; opacity: .9; }
+  .progress b { color: #ffd166; }
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; }
+  .filters button { border: 1px solid rgba(255,255,255,.4); background: transparent; color: #fff;
+                    padding: 4px 10px; border-radius: 14px; cursor: pointer; font-size: 12px; }
+  .filters button.active { background: #ffd166; color: #1e3a5f; border-color: #ffd166; font-weight: 600; }
+  .hint { font-size: 12px; opacity: .8; margin-left: auto; }
+  main { padding: 16px 20px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  @media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  .card { background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  .card img { width: 100%; height: 170px; object-fit: cover; display: block; background: #ddd; }
+  .card .meta { padding: 6px 10px 2px; font-size: 11px; color: #666; line-height: 1.6; }
+  .card .meta .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; margin-right: 4px;
+                     font-size: 11px; }
+  .card .sim { color: #1e6fa3; font-size: 11px; margin-top: 2px; font-weight: 600; }
+  .tag.cl { background: #e3eaf3; color: #1e3a5f; }
+  .tag.sg { background: #eee; color: #555; }
+  .card .label { padding: 0 10px; font-size: 12px; min-height: 18px; }
+  .label.confirm { color: #1a7f37; font-weight: 600; }
+  .label.uncertain { color: #b8860b; }
+  .label.reject { color: #c22; text-decoration: line-through; }
+  .card .ops { padding: 8px 10px 10px; display: flex; gap: 6px; align-items: center; }
+  .card .ops input { flex: 1; min-width: 0; padding: 5px 8px; border: 1px solid #ccc; border-radius: 6px;
+                     font-size: 12px; }
+  .card .ops button { padding: 5px 10px; border: none; border-radius: 6px; cursor: pointer;
+                      font-size: 12px; font-weight: 600; }
+  .btn-ok { background: #1a7f37; color: #fff; }
+  .btn-un { background: #d9a400; color: #fff; }
+  .btn-rj { background: #c22; color: #fff; }
+  .btn-clear { background: #e5e5e5; color: #666; }
+  .card.done { outline: 2px solid #1a7f37; outline-offset: -2px; }
+  .card.unc { outline: 2px solid #d9a400; outline-offset: -2px; }
+  .card.rej { outline: 2px solid #c22; outline-offset: -2px; opacity: .75; }
+  .card.focused { outline: 3px solid #1e3a5f; outline-offset: -2px; }
+  .card { cursor: pointer; }
+  .empty { text-align: center; color: #999; padding: 60px 0; }
+  #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.88); display: none;
+              align-items: center; justify-content: center; z-index: 100; cursor: zoom-out; }
+  #lightbox img { max-width: 94vw; max-height: 92vh; object-fit: contain; border-radius: 4px;
+                  box-shadow: 0 4px 30px rgba(0,0,0,.5); }
+  .lb-hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+             color: #ddd; font-size: 13px; opacity: .85; background: rgba(0,0,0,.4);
+             padding: 4px 14px; border-radius: 14px; }
+  .card img { cursor: zoom-in; }
+  kbd { background: #eee; border: 1px solid #ccc; border-radius: 3px; padding: 0 4px; font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐬 中华白海豚个体审核</h1>
+  <span class="progress">已审 <b id="nReview">0</b> / <span id="nTotal">0</span></span>
+  <div class="filters" id="filters"></div>
+  <span class="hint">快捷键：<kbd>1</kbd>确认 <kbd>2</kbd>不确定 <kbd>3</kbd>排除</span>
+</header>
+<main>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" style="display:none">没有待审核的照片</div>
+</main>
+<div id="lightbox">
+  <img id="lbImg" alt="原图">
+  <div class="lb-hint">点击任意处或按 Esc 关闭</div>
+</div>
+<script>
+let STATE = null;
+let curFilter = "all";
+let focusIdx = 0;
+
+async function load() {
+  const r = await fetch("/api/state?filter=" + encodeURIComponent(curFilter));
+  STATE = await r.json();
+  document.getElementById("nReview").textContent = STATE.n_reviewed;
+  document.getElementById("nTotal").textContent = STATE.n_total;
+  renderFilters();
+  render();
+  focusIdx = 0;
+}
+
+function renderFilters() {
+  const keys = [["all", "全部"], ["unreviewed", "未审"],
+    ["reviewed", "已审"], ["noise", "噪声"]];
+  for (const k of Object.keys(STATE.clusters).sort((a, b) => +a - +b))
+    keys.push([k, "簇 " + k]);
+  const box = document.getElementById("filters");
+  box.innerHTML = "";
+  for (const [k, name] of keys) {
+    const b = document.createElement("button");
+    b.textContent = name;
+    b.className = k === curFilter ? "active" : "";
+    b.onclick = () => { curFilter = k; load(); };
+    box.appendChild(b);
+  }
+}
+
+function clusterName(c) { return c === -1 ? "噪声" : "簇 " + c; }
+
+function render() {
+  const grid = document.getElementById("grid");
+  const empty = document.getElementById("empty");
+  grid.innerHTML = "";
+  if (!STATE.photos.length) { empty.style.display = "block"; return; }
+  empty.style.display = "none";
+  const cards = [];
+  for (const p of STATE.photos) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.dataset.imageId = p.image_id;
+    if (p.label) {
+      if (p.label === "uncertain") card.className += " unc";
+      else if (p.label === "reject") card.className += " rej";
+      else card.className += " done";
+    }
+    cards.push(card);
+    card.addEventListener("click", () => focusCard(cards.indexOf(card)));
+    const img = document.createElement("img");
+    img.loading = "lazy";
+    img.src = "/api/image/" + p.image_id;
+    img.title = "点击放大（原图）";
+    img.addEventListener("click", (e) => {
+      e.stopPropagation();          // 点击图片=放大，不触发卡片聚焦
+      openLightbox("/api/image/" + p.image_id + "?full=1");
+    });
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.innerHTML = '<span class="tag cl">' + clusterName(p.cluster) + '</span>' +
+      (p.source_group ? '<span class="tag sg">' + p.source_group + '</span>' : "") +
+      (p.session_id ? " 调查 " + p.session_id : "") +
+      (p.quality_band ? " " + p.quality_band : "") +
+      '<br><span style="font-size:10px;color:#aaa">' + p.image_id + '</span>' +
+      (p.similar && p.similar.length
+        ? '<div class="sim">像 ' + p.similar.map(s => s.name + " " + s.score.toFixed(2)).join(" · ") + '</div>'
+        : "");
+    const label = document.createElement("div");
+    label.className = "label " + (p.label === "uncertain" ? "uncertain" : p.label === "reject" ? "reject" : "confirm");
+    label.textContent = { confirm: "已确认: " + p.label, uncertain: "不确定", reject: "已排除" }[p.label] || "";
+    const ops = document.createElement("div");
+    ops.className = "ops";
+    const input = document.createElement("input");
+    input.placeholder = "个体名 如 CI-001";
+    input.value = p.label && !["uncertain", "reject"].includes(p.label) ? p.label : "";
+    const mkBtn = (txt, cls, fn) => {
+      const b = document.createElement("button");
+      b.textContent = txt; b.className = cls;
+      b.onclick = () => { fn(); };
+      return b;
+    };
+    ops.append(input,
+      mkBtn("确认", "btn-ok", () => annotate(p.image_id, "confirm", input.value)),
+      mkBtn("不确定", "btn-un", () => annotate(p.image_id, "uncertain")),
+      mkBtn("排除", "btn-rj", () => annotate(p.image_id, "reject")),
+      mkBtn("清除", "btn-clear", () => annotate(p.image_id, "clear")));
+    card.append(img, meta, label, ops);
+    grid.appendChild(card);
+  }
+  window.__cards = cards;
+  focusCard(0);
+}
+
+/* 焦点卡片：深色边框高亮，键盘操作作用于它 */
+function focusCard(i) {
+  const cards = window.__cards || [];
+  if (!cards.length) return;
+  focusIdx = Math.max(0, Math.min(cards.length - 1, i));
+  cards.forEach((c, j) => c.classList.toggle("focused", j === focusIdx));
+  cards[focusIdx].scrollIntoView({ block: "nearest" });
+}
+
+async function annotate(imageId, action, identity) {
+  if (action === "confirm") {
+    const nm = (identity || "").trim();
+    if (nm) {
+      // 重名确认：该名字已用于其他照片时提醒（防把不同个体错合并 / 确认跨簇同体）
+      const others = STATE.photos.filter(x => x.image_id !== imageId && x.label === nm);
+      if (others.length) {
+        const grp = [...new Set(others.map(o => o.cluster))].map(c => c === -1 ? "噪声" : "簇" + c).join("、");
+        if (!confirm('个体名 "' + nm + '" 已用于 ' + others.length + ' 张照片（' + grp + '）。\n确认它们是同一只海豚？\n确定=继续标记，取消=重新命名'))
+          return;
+      }
+    }
+  }
+  const r = await fetch("/api/annotate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image_id: imageId, action, identity: identity || "" })
+  });
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+  document.getElementById("nReview").textContent = d.n_reviewed;
+  // 局部更新该卡片（不重建列表 → 保持滚动位置）
+  const card = document.querySelector('.card[data-image-id="' + imageId + '"]');
+  if (card) {
+    const p = STATE.photos.find(x => x.image_id === imageId);
+    if (p) p.label = d.label;
+    card.className = "card";
+    if (d.label === "uncertain") card.className += " unc";
+    else if (d.label === "reject") card.className += " rej";
+    else if (d.label) card.className += " done";
+    card.querySelector(".label").textContent =
+      d.label ? (d.label === "uncertain" ? "不确定" :
+                 d.label === "reject" ? "已排除" : "已确认: " + d.label) : "";
+    card.querySelector("input").value =
+      d.label && !["uncertain", "reject"].includes(d.label) ? d.label : "";
+  }
+}
+
+/* 大图放大：点击缩略图 → 原图全屏预览（保持原始比例），点击/Esc 关闭 */
+const lb = document.getElementById("lightbox");
+const lbImg = document.getElementById("lbImg");
+function openLightbox(src) {
+  lbImg.src = src;
+  lb.style.display = "flex";
+  document.body.style.overflow = "hidden";
+}
+function closeLightbox() {
+  lb.style.display = "none";
+  lbImg.src = "";
+  document.body.style.overflow = "";
+}
+lb.addEventListener("click", closeLightbox);
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { closeLightbox(); return; }
+  const cards = window.__cards || [];
+  const focused = cards[focusIdx];
+  if (!focused) return;
+  const id = focused.dataset.imageId;
+  const input = focused.querySelector("input");
+  /* 输入框内：Enter = 确认（有名字时） */
+  if (e.target.tagName === "INPUT") {
+    if (e.key === "Enter" && input.value.trim()) {
+      e.preventDefault();
+      annotate(id, "confirm", input.value);
+    }
+    return;
+  }
+  if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); focusCard(focusIdx + 1); }
+  else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); focusCard(focusIdx - 1); }
+  else if (e.key === "1") { if (input.value.trim()) annotate(id, "confirm", input.value); }
+  else if (e.key === "2") { annotate(id, "uncertain"); }
+  else if (e.key === "3") { annotate(id, "reject"); }
+});
+
+load();
+</script>
+</body>
+</html>

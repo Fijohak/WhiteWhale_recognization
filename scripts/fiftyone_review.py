@@ -69,27 +69,40 @@ def build_dataset(df: pd.DataFrame, dataset_name: str = "local_reid_review"):
 
 
 def export_confirmed(dataset_name: str, out_csv: Path) -> None:
-    """导出人工审核结果：confirmed_identity 非空的行。"""
+    """导出人工审核结果。
+
+    审核以 tag 为准（App 中缩略图上直接打，最直观）：
+    - CI-xxx  （如 CI-001）：该照片属于个体 CI-xxx，同一只海豚用同一个 tag；
+    - uncertain：无法判断，留给后续；
+    - reject：确认不是任何已审核个体（噪声 / 新个体候选）。
+    兼容旧的 confirmed_identity 字段（字段与 tag 都有时以 tag 为准）。
+    """
     import fiftyone as fo
 
     ds = fo.load_dataset(dataset_name)
-    view = ds.view()  # 全量样本
     rows = []
-    for sample in view:
-        if sample.confirmed_identity:
-            rows.append({
-                "image_id": sample.image_id,
-                "confirmed_identity": sample.confirmed_identity,
-                "source_path": sample.filepath,
-                "cluster": sample.cluster,
-            })
+    for sample in ds:
+        ci = [t for t in sample.tags if t.startswith("CI-")]
+        ident = ci[0] if ci else (sample.confirmed_identity or "")
+        if not ident:
+            continue
+        status = "uncertain" if "uncertain" in sample.tags else "reject" if "reject" in sample.tags else "confirmed"
+        rows.append({
+            "image_id": sample.image_id,
+            "confirmed_identity": ident,
+            "status": status,
+            "cluster": sample.cluster,
+            "source_path": sample.filepath,
+            "tags": ",".join(sorted(sample.tags)),
+        })
     if not rows:
-        print("[fiftyone] 尚无人工确认的个体（confirmed_identity 全空）。")
+        print("[fiftyone] 尚无人工确认的个体（无 CI-* tag / confirmed_identity 全空）。")
         return
     out = pd.DataFrame(rows)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(out_csv, index=False, encoding="utf-8-sig")
     print(f"[fiftyone] 导出 {len(out)} 条人工确认 → {out_csv}")
+    print(f"          个体数: {out['confirmed_identity'].nunique()}（{sorted(out['confirmed_identity'].unique())}）")
 
 
 if __name__ == "__main__":
@@ -113,5 +126,21 @@ if __name__ == "__main__":
     if args.export == "confirmed":
         export_confirmed(args.dataset, args.out)
     else:
+        # 防丢失保护：数据集已存在且含人工审核结果时禁止重建覆盖
+        try:
+            import fiftyone as fo  # noqa: F401
+            if fo.dataset_exists(args.dataset):
+                ds = fo.load_dataset(args.dataset)
+                reviewed = sum(1 for s in ds if s.confirmed_identity)
+                if reviewed > 0:
+                    raise SystemExit(
+                        f"数据集 {args.dataset} 已有 {reviewed} 条人工审核结果，"
+                        f"禁止重建覆盖。请先导出："
+                        f"python scripts/fiftyone_review.py --export confirmed，"
+                        f"或确认丢弃后手动删除数据集再重建。")
+        except SystemExit:
+            raise
+        except Exception:
+            pass  # fiftyone 不可用时按原逻辑走（构建时自然会报缺依赖）
         df = load_review_dataset(args.clusters, args.images_root)
         build_dataset(df, args.dataset)

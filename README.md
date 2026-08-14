@@ -145,7 +145,8 @@ I:\01.zip / I:\processed.zip / I:\Processed 2.zip   # 原始压缩包（只读�
 * **评分区间 = 图片分级**：W01 txt 计数（50-59:14, 60-69:100, 70-79:64, 80+:28）与 `I:\01` 目录图片数逐项一致；
 * **MO / RAY / DEREK = 拍摄者代码**：txt 人员计数明确；
 * **文件名双模式**：RAY 拍摄 `0145_20140417_SZi_01_RAY_0632.JPG`（编号_日期_地点_批次_人员_连拍号）；MO 拍摄 `RES20001.JPG`（无日期字段）；
-* **01 = W01（SZi），03 = W03（HBi）**，同一天两群。
+* **01 = W01（SZi），03 = W03（HBi）**，同一天两群；
+* **01 与 03 是两个独立海豚群**：分组编号在群内各自独立（01_02 与 03_02 不是同一只），跨群照片默认视为不同个体，除非未来人工确认；
 
 ### 5.3 待确认假设（A1–A10）
 
@@ -429,6 +430,26 @@ I:\01.zip / I:\processed.zip / I:\Processed 2.zip   # 原始压缩包（只读�
 随着可靠伪标签数量增加，可以逐步从完全无监督方法过渡到弱监督或半监督方法。
 
 高置信度样本优先用于训练，低置信度样本继续保留在待核验集合中。
+
+### 10.1 第一轮伪标签训练（2026-08-14，已完成）
+
+使用人工初审确认的 135 张 / 31 个体作为伪标签（非专家复核，结果叫 Candidate 特征），
+ArcFace 度量学习（s=32, m=0.3）两阶段微调 MegaDescriptor-T-224：
+
+| 指标 | 预训练基线 | 微调后 | 说明 |
+|---|---|---|---|
+| B 协议 R@1 / mAP | 0.239 / 0.332 | **0.473 / 0.541** | leave-one-out 全库检索 |
+| A 协议 R@1 / mAP | 0.122 / 0.244 | **0.327 / 0.435** | 代表图查询（真实场景） |
+| 独立验证个体 R@1 | 0.529 | **0.765** | 6 个体 17 张，模型未见 |
+| 跨群误配（A 协议） | 19 次（12.2%） | 21 次（13.5%） | 01↔03 仍是最难区分项 |
+
+置信度变化（见 `outputs/reports/confidence_check/summary.txt`）：跨群对相似度
+p95 从 0.843 压到 0.465（≥0.70 的跨群对从 24.1% → 1.1%）；阈值判定精确率
+≥0.70 时从 5.6% → 19.9%。分数从"几乎无信息"变为有筛选价值，但仍不足以
+自动确认个体（同群不同个体对仍难分），人工核验环节保留。
+
+微调特征：`outputs/embeddings/embeddings_metric.npy`（配套 meta + config）；
+聚类：`outputs/clusters_metric/`（8 簇 + 61% 噪声，比预训练特征的大混簇更纯）。
 
 ---
 
@@ -724,7 +745,7 @@ chinese-white-dolphin-reid/
 在正式开展训练前，需要继续确认：
 
 * `70-79` 组散图的归属（01：59 张、03：148 张，人工跟进中）；
-* 01 与 03 之间同名编号分组是否对应同一只海豚（跨调查个体对应）；
+* 01 与 03 之间同名编号分组是否对应同一只海豚（跨调查个体对应）——**已确认：两个群编号独立，跨群默认不同个体**；
 * 每张照片的背鳍朝向（左侧 / 右侧 / 未知）标注；
 * `50-59`、`60-69`、`below 50` 区间的含义与是否可用于训练；
 * `MO`、`RAY`、`DEREK` 等代码对应的人员；
@@ -786,16 +807,19 @@ python src/query_app.py --port 8000
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `--embeddings` | `outputs/embeddings/embeddings.npy` | gallery 特征 |
-| `--meta` / `--pilot` | `outputs/embeddings/…` / `outputs/pilot/pilot_set.csv` | 追溯字段 |
+| `--embeddings` | `outputs/embeddings/embeddings_metric.npy` | gallery 特征（默认伪标签微调特征） |
+| `--meta` / `--pilot` | `outputs/embeddings/embeddings_metric_meta.csv` / `outputs/pilot/pilot_set.csv` | 追溯字段 |
 | `--images-root` | `I:/` | 源图根目录（候选缩略图用） |
-| `--model` | `megadescriptor` | `megadescriptor` / `dinov2` |
-| `--dinov2-weight` | 无 | DINOv2 官方权重 .pth（`--model dinov2` 时必填） |
-| `--threshold` | `0.45` | known / unknown 判定阈值 |
+| `--model` | 自动 | 查询模型；默认按 `embedding_config.json` 自动匹配 gallery 特征模型，显式指定时校验必须同源 |
+| `--metric-ckpt` | `outputs/metric_learning/r1/best.pt` | 伪标签微调权重（gallery 为微调特征时使用） |
+| `--dinov2-weight` | 无 | DINOv2 官方权重 .pth（gallery 为 dinov2 特征时必填） |
+| `--threshold` | `0.60` | known / unknown 判定阈值（leave-one-out 标定） |
 | `--k` | `10` | 返回候选数 |
 | `--host` / `--port` | `127.0.0.1` / `8000` | 监听地址 |
 
-> 注意：gallery 特征必须与查询模型同源。若用 DINOv2 查询，需先用 DINOv2 重新提取 gallery 特征（`embedding_config.json` 会记录模型名，启动时自动校验）。
+> 注意：gallery 特征必须与查询模型同源。默认微调特征需配微调权重（已自动处理）；
+> 切换回预训练特征时用 `--embeddings outputs/embeddings/embeddings.npy --meta outputs/embeddings/embeddings_meta.csv`，
+> 模型会自动切回预训练 MegaDescriptor。
 
 ### 20.3 语义约束
 

@@ -36,7 +36,8 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.model.reid.embedding.base import DINOv2Adapter, MegaDescriptorAdapter  # noqa: E402
+from src.model.reid.embedding.base import (  # noqa: E402
+    DINOv2Adapter, MegaDescriptorAdapter, MegaDescriptorMetricAdapter)
 from src.model.reid.retrieval.cosine import cosine_topk  # noqa: E402
 
 
@@ -55,12 +56,26 @@ def load_gallery(embeddings_path: Path, meta_path: Path, pilot_path: Path):
     return emb, df
 
 
-def check_model_match(args, emb_dim: int) -> str:
-    """校验查询模型与 gallery 特征同源（同模型），返回模型名。
+def _model_family_matches(query: str, gallery: str) -> bool:
+    """查询模型与 gallery 特征是否同源（同族同权重）。
 
-    不同模型即使维度相同（如 MegaDescriptor/DINOv2 都是 768D），
-    特征分布也不同，不可直接比较——必须与 embedding_config.json
-    记录的提取模型一致。
+    微调特征（metric-learning）与预训练特征分布不同，不可混配；
+    megadescriptor 用精确匹配避免被 metric-learning 前缀误配。
+    """
+    if query == "metric-learning":
+        return "metric-learning" in gallery
+    if query == "dinov2":
+        return "dinov2" in gallery
+    if query == "megadescriptor":
+        return gallery in ("megadescriptor", "hf-hub:BVRA/MegaDescriptor-T-224")
+    return False
+
+
+def resolve_model(args, emb_dim: int) -> str:
+    """决定查询模型名，返回 "megadescriptor" / "dinov2" / "metric-learning"。
+
+    默认自动匹配 gallery 特征模型（读 embedding_config.json）；
+    --model 显式指定时校验必须与 gallery 同源，否则拒绝（防错配）。
     """
     cfg_path = Path(args.embeddings).parent / "embedding_config.json"
     gallery_model = "unknown"
@@ -68,22 +83,17 @@ def check_model_match(args, emb_dim: int) -> str:
         import json
         gallery_model = json.loads(cfg_path.read_text(encoding="utf-8")).get("model", "unknown")
 
-    if args.model == "megadescriptor":
-        compatible = ("megadescriptor", "hf-hub:BVRA/MegaDescriptor-T-224")
-        if not any(m in str(gallery_model) for m in compatible):
+    if args.model is not None:
+        if not _model_family_matches(args.model, gallery_model):
             raise SystemExit(
                 f"模型不匹配：gallery 特征由 [{gallery_model}] 提取，"
-                f"查询用 [{args.model}] 特征分布不同，不可比较。"
-                f"请先提取同模型 gallery 特征。")
-        return "megadescriptor"
-    if args.model == "dinov2":
-        if "dinov2" not in str(gallery_model):
-            raise SystemExit(
-                f"模型不匹配：gallery 特征由 [{gallery_model}] 提取，"
-                f"查询用 [dinov2] 特征分布不同，不可比较。"
-                f"请先提取同模型 gallery 特征。")
-        return "dinov2"
-    raise SystemExit(f"未知模型: {args.model}")
+                f"查询用 [{args.model}] 特征分布不同，不可比较。")
+        return args.model
+    for candidate in ("metric-learning", "dinov2", "megadescriptor"):
+        if _model_family_matches(candidate, gallery_model):
+            return candidate
+    raise SystemExit(
+        f"无法确定查询模型：gallery 特征由 [{gallery_model}] 提取（--model 可显式指定）。")
 
 
 def build_app(args, embedder=None) -> FastAPI:
@@ -94,17 +104,19 @@ def build_app(args, embedder=None) -> FastAPI:
     emb, info = load_gallery(args.embeddings, args.meta, args.pilot)
     gallery_ids = info["image_id"].tolist()
     images_root = Path(args.images_root)
-    model_name = check_model_match(args, emb.shape[1])
+    model_name = resolve_model(args, emb.shape[1])
 
     # 本地离线工具：权重从本地缓存加载（HF_HUB_OFFLINE=1），不访问外网。
     # 缓存缺失时 timm 会给出明确的权重找不到错误。
-    os.environ.setdefault("HF_HUB_OFFLINE", "1") # 坏事做尽！！！
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
-    # 模型：默认 MegaDescriptor（与 gallery 特征一致）；dinov2 需显式传权重
+    # 模型：默认与 gallery 特征一致（微调特征 → 加载对应权重）
     if embedder is not None:
         model = embedder
     elif model_name == "dinov2":
         model = DINOv2Adapter(weight_path=args.dinov2_weight)
+    elif model_name == "metric-learning":
+        model = MegaDescriptorMetricAdapter(ckpt_path=args.metric_ckpt)
     else:
         model = MegaDescriptorAdapter()
     if model.feat_dim != emb.shape[1]:
@@ -194,18 +206,25 @@ def _safe(row: pd.Series, col: str) -> str:
 def main():
     base = Path(__file__).resolve().parents[1] / "outputs"
     parser = argparse.ArgumentParser(description="本地图库个体查询 Web 客户端")
-    parser.add_argument("--embeddings", type=Path, default=base / "embeddings" / "embeddings.npy")
-    parser.add_argument("--meta", type=Path, default=base / "embeddings" / "embeddings_meta.csv")
+    parser.add_argument("--embeddings", type=Path,
+                        default=base / "embeddings" / "embeddings_metric.npy",
+                        help="gallery 特征（默认伪标签微调特征，见 embedding_config.json）")
+    parser.add_argument("--meta", type=Path,
+                        default=base / "embeddings" / "embeddings_metric_meta.csv")
     parser.add_argument("--pilot", type=Path, default=base / "pilot" / "pilot_set.csv")
     parser.add_argument("--images-root", type=Path, default=Path("I:/"),
                         help="图片根目录（含 01/ 03/ 子目录）")
-    parser.add_argument("--model", choices=["megadescriptor", "dinov2"],
-                        default="megadescriptor")
+    parser.add_argument("--model", type=str, default=None,
+                        help="查询模型覆盖（默认自动匹配 gallery 特征模型）："
+                             "megadescriptor / dinov2 / metric-learning")
     parser.add_argument("--dinov2-weight", type=str, default=None,
-                        help="DINOv2 官方权重 .pth（--model dinov2 时必填）")
+                        help="DINOv2 官方权重 .pth（gallery 为 dinov2 特征时必填）")
+    parser.add_argument("--metric-ckpt", type=Path,
+                        default=base / "metric_learning" / "r1" / "best.pt",
+                        help="伪标签微调权重（gallery 为 metric-learning 特征时使用）")
     parser.add_argument("--k", type=int, default=10)
-    parser.add_argument("--threshold", type=float, default=0.45,
-                        help="三态判定阈值：最高分低于此值 → unknown（疑似未知个体）")
+    parser.add_argument("--threshold", type=float, default=0.60,
+                        help="三态判定阈值（leave-one-out 标定，0.60 平衡覆盖与误报）")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--host", default="127.0.0.1")
     args = parser.parse_args()
