@@ -137,6 +137,12 @@ class MegaDescriptorAdapter(_HFImageModel):
     feat_dim = 768
 
     def _load(self):
+        import os
+
+        # 全程离线：权重已在本地缓存，禁止联网校验（必须早于 import timm，
+        # huggingface_hub 的 OFFLINE 常量在导入时固化）
+        os.environ["HF_HUB_OFFLINE"] = "1"
+
         import timm
 
         self.model = timm.create_model(

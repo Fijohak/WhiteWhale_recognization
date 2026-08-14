@@ -134,6 +134,9 @@ def main():
     parser.add_argument("--out", type=Path, default=base / "pool_assignment")
     parser.add_argument("--eval", action="store_true",
                         help="只跑群内 leave-one-out 评估（不划分散图）")
+    parser.add_argument("--reviews", type=Path,
+                        default=base / "pool_assignment" / "pool_reviews.csv",
+                        help="人工审核记录：confirmed 行并入 gallery 重跑")
     args = parser.parse_args()
 
     gallery = load_gallery(args.pilot, args.gallery_embeddings, args.gallery_meta)
@@ -180,7 +183,36 @@ def main():
         embs[keep[s:s + 32]] = model.encode(imgs[s:s + 32])
     pool["_emb"] = list(embs)
 
-    gallery = load_gallery(args.pilot, args.gallery_embeddings, args.gallery_meta)
+    # 第一遍：不含人工确认回写（基线，线上旧版）
+    before = assign_pool(pool, gallery, args.topk, args.threshold)
+    before.to_csv(args.out / "pool_candidates_before.csv",
+                  index=False, encoding="utf-8-sig")
+
+    # 人工确认回写：reviews 中 confirmed 的散图并入 gallery（特征复用本池），
+    # 已确认的图不再作为 query
+    n_merged = 0
+    if args.reviews and args.reviews.exists():
+        rev = pd.read_csv(args.reviews)
+        conf = rev[(rev["review_status"] == "confirmed")
+                   & rev["reviewed_identity"].notna()]
+        new_rows = []
+        for _, r in conf.iterrows():
+            qrow = pool[pool["image_id"] == r["image_id"]]
+            if qrow.empty:
+                print(f"[assign] 警告: review {r['image_id']} 不在散图池，跳过")
+                continue
+            new_rows.append({"image_id": r["image_id"],
+                             "confirmed_identity": float(r["reviewed_identity"]),
+                             "session_id": qrow.iloc[0]["session_id"],
+                             "emb": qrow.iloc[0]["_emb"],
+                             "group": qrow.iloc[0]["group"]})
+        if new_rows:
+            gallery = pd.concat([gallery, pd.DataFrame(new_rows)], ignore_index=True)
+            pool = pool[~pool["image_id"].isin(conf["image_id"])].reset_index(drop=True)
+            n_merged = len(new_rows)
+            print(f"[assign] 并入人工确认散图 {n_merged} 张 → gallery；"
+                  f"剩余 query {len(pool)} 张")
+
     out = assign_pool(pool, gallery, args.topk, args.threshold)
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -197,6 +229,30 @@ def main():
     print(f"[assign] Top1 分数: p50={top1_scores.median():.3f} "
           f"p75={top1_scores.quantile(.75):.3f} p90={top1_scores.quantile(.9):.3f}")
     print(f"[assign] → {args.out / 'pool_candidates.csv'}")
+
+    # 回写对比：并入前后 Top1 变化（可追溯）
+    if n_merged:
+        b = before.set_index("image_id")
+        a = out.set_index("image_id")
+        common = b.index.intersection(a.index)
+        diff = pd.DataFrame({
+            "image_id": common,
+            "before_top1": b.loc[common, "top1"],
+            "after_top1": a.loc[common, "top1"],
+            "before_score": b.loc[common, "top1_score"],
+            "after_score": a.loc[common, "top1_score"],
+            "relative_path": a.loc[common, "relative_path"],
+        })
+        diff["changed"] = diff["before_top1"] != diff["after_top1"]
+        diff.to_csv(args.out / "pool_assignment_diff.csv", index=False,
+                    encoding="utf-8-sig")
+        changed = diff[diff["changed"]]
+        print(f"[assign] 回写对比: 共 {len(common)} 张可比较，改判 {len(changed)} 张")
+        if len(changed):
+            pairs = changed.groupby(["before_top1", "after_top1"]).size()
+            for (fb, fa), n in pairs.items():
+                print(f"[assign]   {fb:.0f} → {fa:.0f} × {n}")
+            print(f"[assign] → {args.out / 'pool_assignment_diff.csv'}")
 
 
 if __name__ == "__main__":
