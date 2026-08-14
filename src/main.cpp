@@ -334,7 +334,6 @@ int runApplication()
                 image.texture.height;
 
 
-            // 暂时不显示文件名
             uiImage.name.clear();
 
 
@@ -462,8 +461,7 @@ int runApplication()
         }
 
 
-        // 刷新左侧当前 Group，
-        // 让刚复制进去的图片立即出现。
+        // 刷新左侧当前 Group
         loadGroup(
             groupIndex
         );
@@ -477,7 +475,68 @@ int runApplication()
 
 
     // =====================================================
-    // 8.7 选择 Group Root Folder
+    // 8.7 Process Mode Change
+    //
+    // 点击 Back：
+    //
+    // Single / Batch
+    //      ↓
+    // ProcessMode::Select
+    //
+    // 此时彻底清除 Single 和 Batch 已选择的数据。
+    //
+    // 这样下一次重新进入 Single / Batch 时，
+    // 都会恢复到 Select Image / Select Folder 状态。
+    // =====================================================
+
+    uiEvents.onModeChange =
+        [&](ProcessMode mode)
+    {
+        if (
+            mode !=
+            ProcessMode::Select
+        )
+        {
+            return;
+        }
+
+
+        // --------------------------------------
+        // 清理 Single 后端状态
+        // --------------------------------------
+
+        processManager.clearSingle();
+
+
+        // --------------------------------------
+        // 清理 Single UI Preview
+        // --------------------------------------
+
+        mainUi.clearSinglePreview();
+
+
+        // --------------------------------------
+        // 清理 Batch 后端状态
+        // --------------------------------------
+
+        processManager.clearBatch();
+
+
+        // --------------------------------------
+        // 清理 Batch UI Preview
+        // --------------------------------------
+
+        mainUi.clearBatchPreview();
+
+
+        std::cout
+            << "Process selection cleared."
+            << '\n';
+    };
+
+
+    // =====================================================
+    // 8.8 选择 Group Root Folder
     // =====================================================
 
     uiEvents.onSelectGroupFolder =
@@ -490,7 +549,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.8 重新选择 Group Root Folder
+    // 8.9 重新选择 Group Root Folder
     // =====================================================
 
     uiEvents.onReselectGroupFolder =
@@ -504,7 +563,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.9 点击顶部 Group
+    // 8.10 点击顶部 Group
     // =====================================================
 
     uiEvents.onGroupClick =
@@ -517,7 +576,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.10 点击左侧图片
+    // 8.11 点击左侧图片
     //
     // 暂时只保留接口
     // =====================================================
@@ -555,7 +614,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.11 Single - Select Image
+    // 8.12 Single - Select Image
     // =====================================================
 
     uiEvents.onPickSingle =
@@ -568,7 +627,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.12 Single - Drop Image
+    // 8.13 Single - Drop Image
     // =====================================================
 
     uiEvents.onSingleDrop =
@@ -598,9 +657,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.13 Single - Confirm
-    //
-    // 暂时只保留接口
+    // 8.14 Single - Confirm
     // =====================================================
 
     uiEvents.onSingleConfirm =
@@ -611,7 +668,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.14 Batch - Select Folder
+    // 8.15 Batch - Select Folder
     // =====================================================
 
     uiEvents.onPickFolder =
@@ -624,7 +681,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.15 Batch - Previous
+    // 8.16 Batch - Previous
     // =====================================================
 
     uiEvents.onBatchPrev =
@@ -648,7 +705,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.16 Batch - Next
+    // 8.17 Batch - Next
     // =====================================================
 
     uiEvents.onBatchNext =
@@ -672,9 +729,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.17 Batch - Confirm
-    //
-    // 暂时只保留接口
+    // 8.18 Batch - Confirm
     // =====================================================
 
     uiEvents.onBatchConfirm =
@@ -685,16 +740,16 @@ int runApplication()
 
 
     // =====================================================
-    // 8.18 New Category
-    //
-    // 暂时只保留接口
+    // 8.19 New Category
     // =====================================================
 
     uiEvents.onNewCategory =
         [&]()
     {
-        // 没有选择 Group Root：
-        // 按需求，什么都不做。
+        // --------------------------------------
+        // 没有选择 Group Root
+        // --------------------------------------
+
         if (
             groupManager.getRootPath().empty()
         )
@@ -703,17 +758,23 @@ int runApplication()
         }
 
 
+        // --------------------------------------
+        // 当前右侧图片
+        // --------------------------------------
+
         const std::filesystem::path imagePath =
             getCurrentProcessImage();
 
 
-        // 右侧没有正在处理的图片：
-        // 什么都不做。
         if (imagePath.empty())
         {
             return;
         }
 
+
+        // --------------------------------------
+        // 创建新 Group
+        // --------------------------------------
 
         int newGroupIndex = -1;
 
@@ -734,8 +795,10 @@ int runApplication()
         }
 
 
-        // createGroupWithImage() 已重新扫描 Root。
-        // 更新顶部 Group 数量和 Root 信息。
+        // --------------------------------------
+        // 更新顶部 Root / Group 数量
+        // --------------------------------------
+
         mainUi.setGroupRoot(
             groupManager.getRootName(),
             groupManager.getRootPath(),
@@ -743,13 +806,19 @@ int runApplication()
         );
 
 
-        // 自动选中新建的 Group。
+        // --------------------------------------
+        // 自动选中新 Group
+        // --------------------------------------
+
         mainUi.setActiveGroup(
             newGroupIndex
         );
 
 
-        // 左侧立即展示新 Group。
+        // --------------------------------------
+        // 左侧加载新 Group
+        // --------------------------------------
+
         loadGroup(
             newGroupIndex
         );
@@ -763,7 +832,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.19 注册 UI Events
+    // 8.20 注册 UI Events
     // =====================================================
 
     mainUi.setEvents(
