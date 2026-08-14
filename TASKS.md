@@ -46,12 +46,13 @@
 
 | # | 任务 | 说明 | 交付物 | 状态 |
 |---|------|------|--------|------|
-| 2.1 | 选择 Pilot Set | 高分 43 组代表照片（Anchor，199 张）+ 207 张散图（Pool） | 清单文件 | [~] |
-| 2.2 | 基线 embedding 提取 | 预训练模型（MegaDescriptor-T-224 / DINOv2 / MiewID）直接提特征，**不裁剪** | `outputs/embeddings/` | [~] |
+| 2.1 | 选择 Pilot Set | 高分 43 组代表照片（Anchor，199 张）+ 207 张散图（Pool） | 清单文件 | [x] |
+| 2.2 | 基线 embedding 提取 | 预训练模型（MegaDescriptor-T-224 / DINOv2 / MiewID）直接提特征，**不裁剪** | `outputs/embeddings/` | [x] |
 | 2.3 | Anchor Top-K 检索 | **query=Anchor，gallery=Pool（+ 同调查 Anchor 集）**，报告 Recall@1/5/10、mAP | `outputs/nearest_neighbors/` | [ ] |
 | 2.4 | 候选拼图 | 每个 Anchor 的 Top-K 候选照片、相似度、来源批次 | `outputs/contact_sheets/` | [ ] |
 | 2.5 | 基线诊断 | 特征是否区分个体、是否主要按背景/拍摄者聚类 | 基线实验报告 | [ ] |
 | 2.6 | HDBSCAN 降为辅助 | 仅用于无 Anchor 照片 / 发现潜在新个体 / 辅助候选；结果只能叫 Candidate Cluster | 结论记录 | [ ] |
+| 2.7 | 同群散图划分（Pool Assignment） | **query=散图（207 张），gallery=同群已确认个体（133 张）**，中心裁剪 0.55 + 预训练特征，群内 Top-K 候选 + 低分疑似新个体标记；候选需人工审核（2026-08-14 完成） | `scripts/assign_pool.py` + `outputs/pool_assignment/` | [x] |
 
 ---
 
@@ -85,11 +86,12 @@
 
 | # | 任务 | 说明 | 交付物 | 状态 |
 |---|------|------|--------|------|
-| 5.1 | 生成伪标签 | 仅用人工确认或高可信约束支持的簇；独立版本化 | `data/reviewed/` 版本 | [ ] |
-| 5.2 | 度量学习训练 | ArcFace / Triplet / 对比学习（每类 1 张时注意少样本限制） | `models/metric_learning/` | [ ] |
-| 5.3 | 重新提取特征与聚类 | 用新模型重跑 embedding → 检索 → 聚类 | `outputs/` 更新 | [ ] |
+| 5.1 | 生成伪标签 | 仅用人工确认或高可信约束支持的簇；独立版本化（当前：人工初审标签，Candidate 级，未复核） | `data/reviewed/` 版本 | [~] |
+| 5.2 | 度量学习训练 | ArcFace / Triplet / 对比学习（每类 1 张时注意少样本限制） | `models/metric_learning/` | [~] |
+| 5.3 | 重新提取特征与聚类 | 用新模型重跑 embedding → 检索 → 聚类 | `outputs/` 更新 | [x] |
 | 5.4 | 难例主动审核 | 低置信边界样本主动学习式人工审核 | 审核记录 | [ ] |
-| 5.5 | 迭代评估 | 微调前后对比检索与聚类指标 | 评价报告 | [ ] |
+| 5.5 | 迭代评估 | 微调前后对比检索与聚类指标 | 评价报告 | [x] |
+| 5.6 | 后续升级（2026-08-14 记入） | ① 微调模型 + 跨群 hard negative（用户决策：先做同群划分，微调暂缓）；② 阈值标定需基于微调特征重做 | 待办 | [ ] |
 
 ---
 

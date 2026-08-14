@@ -451,6 +451,24 @@ p95 从 0.843 压到 0.465（≥0.70 的跨群对从 24.1% → 1.1%）；阈值�
 微调特征：`outputs/embeddings/embeddings_metric.npy`（配套 meta + config）；
 聚类：`outputs/clusters_metric/`（8 簇 + 61% 噪声，比预训练特征的大混簇更纯）。
 
+### 10.2 同群散图划分（2026-08-14，已完成）
+
+场景决策（用户确认）：当前优先做**同群内散图划分**（把 70-79 公共池中
+207 张未归属散图划归到同群已确认个体），不做跨群全库检索；模型微调 +
+跨群 hard negative 作为后期升级项（TASKS.md 5.6）。
+
+流程与结果（`scripts/assign_pool.py`，`outputs/pool_assignment/`）：
+
+- 散图（01: 59 / 03: 148）中心裁剪 0.55 → 预训练 MegaDescriptor 特征；
+  gallery = 同群已确认个体照片（133 张 / 31 个体，裁剪特征）。
+- 输出 `pool_candidates.csv`：每张散图的群内 Top-5 候选（个体 + 分数）、
+  top1、低分（<0.55）标记为 `low_confidence_new_candidate`（疑似新个体）。
+- 结果：199 张有候选，5 张原图缺失（01 群，原始数据问题，仅记录），
+  3 张低分疑似新个体；Top1 分数 p50=0.825。
+- 群内 leave-one-out R@1（`within_group_eval.json`）：01 群 0.474 / 03 群
+  0.570 / 全库 0.549 —— 限制同群与全库相当，说明两群背鳍特征本来就相似，
+  Top-1 正确率约 5 成，候选表必须人工审核后使用。
+
 ---
 
 ## 11. 评价方案

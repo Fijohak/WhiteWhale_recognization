@@ -83,7 +83,7 @@ def make_backbone():
     import os
     import timm
 
-    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ["HF_HUB_OFFLINE"] = "1"
     model = timm.create_model("hf-hub:BVRA/MegaDescriptor-T-224",
                               pretrained=True, num_classes=0)
     model.eval()
@@ -197,6 +197,9 @@ def run_training(args, df: pd.DataFrame, out_dir: Path):
 
     model = ReIDModel(make_backbone(), n_classes=train_df["label_idx"].nunique())
     model = model.to(DEVICE)
+    # 预训练基线：训练前用同一个 backbone 评估（避免二次加载触发网络）
+    pretrained_r1 = eval_retrieval(model, val_loader)
+    print(f"[train] 预训练基线（验证个体）val R@1 = {pretrained_r1:.3f}")
     history = []
     best_r1, best_epoch = 0.0, 0
 
@@ -239,8 +242,7 @@ def run_training(args, df: pd.DataFrame, out_dir: Path):
         if ep % 5 == 0 or ep == 1:
             print(f"  [s2] ep {ep:2d}  loss {loss:.4f}  acc {acc:.3f}  val R@1 {r1:.3f}")
 
-    # 预训练基线：同一验证个体上，未微调 MegaDescriptor 的检索 R@1
-    pretrained_r1 = eval_retrieval(ReIDModel(make_backbone(), 1).to(DEVICE), val_loader)
+    # 预训练基线已在训练前评估（pretrained_r1）
     pd.DataFrame(history).to_csv(out_dir / "history.csv", index=False)
     with open(out_dir / "metrics.json", "w", encoding="utf-8") as f:
         json.dump({
