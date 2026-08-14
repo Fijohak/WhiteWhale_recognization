@@ -782,7 +782,7 @@ void ProcessPanel::drawSingleButtons()
             (
                 availableWidth
                 -
-                buttonWidth
+                totalWidth
             )
             *
             0.5f
@@ -833,23 +833,23 @@ void ProcessPanel::drawSingleButtons()
 void ProcessPanel::drawBatchButtons()
 {
     constexpr float buttonWidth =
-        92.0f;
+        82.0f;
 
     constexpr float buttonHeight =
         36.0f;
 
     constexpr float gap =
-        12.0f;
+        20.0f;
 
 
     const float totalWidth =
         buttonWidth
         *
-        3.0f
+        4.0f
         +
         gap
         *
-        2.0f;
+        3.0f;
 
 
     const float availableWidth =
@@ -885,6 +885,29 @@ void ProcessPanel::drawBatchButtons()
         if (batchPrev)
         {
             batchPrev();
+        }
+    }
+
+
+    ImGui::SameLine(
+        0.0f,
+        gap
+    );
+
+
+    if (
+        ImGui::Button(
+            "New",
+            ImVec2(
+                buttonWidth,
+                buttonHeight
+            )
+        )
+    )
+    {
+        if (newCategory)
+        {
+            newCategory();
         }
     }
 

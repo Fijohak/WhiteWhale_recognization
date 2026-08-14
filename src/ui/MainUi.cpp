@@ -127,6 +127,16 @@ MainUi::MainUi()
                 events.onBatchNext();
             }
         });
+
+    processPanel.setNewCategory(
+        [this]()
+        {
+            if (events.onNewCategory)
+            {
+                events.onNewCategory();
+            }
+        }
+    );
 }
 
 void MainUi::setEvents(
