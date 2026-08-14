@@ -3,8 +3,9 @@
 #include <cstdlib>
 #include <iostream>
 #include <utility>
+#include <vector>
 
-// GLAD 要放在 SDL OpenGL 相关头文件之前
+// GLAD 必须放在 SDL OpenGL 相关头文件之前
 #include <glad/gl.h>
 
 #include <SDL3/SDL.h>
@@ -19,6 +20,7 @@
 // ==========================================
 
 #include "app/GroupManager.h"
+#include "app/ImageManager.h"
 
 // ==========================================
 // Tools
@@ -31,6 +33,7 @@
 // ==========================================
 
 #include "ui/MainUi.h"
+#include "ui/UiImage.h"
 
 
 namespace
@@ -127,6 +130,8 @@ int runApplication()
 
     GroupManager groupManager;
 
+    ImageManager imageManager;
+
     FolderDialog groupFolderDialog;
 
 
@@ -137,90 +142,217 @@ int runApplication()
     UiEvents uiEvents;
 
 
-    // -----------------------------------------------------
-    // 选择 Group Root Folder
-    // -----------------------------------------------------
+    // =====================================================
+    // 8.1 加载某一个 Group 的所有图片
+    // =====================================================
 
-    uiEvents.onSelectGroupFolder =
-        [&]()
-        {
-            groupFolderDialog.open(
-                window
-            );
-        };
-
-
-    // -----------------------------------------------------
-    // 重新选择 Group Root Folder
-    // -----------------------------------------------------
-
-    uiEvents.onReselectGroupFolder =
-        [&]()
-        {
-            groupFolderDialog.open(
-                window,
-                groupManager.getRootPath()
-            );
-        };
-
-
-    // -----------------------------------------------------
-    // 点击顶部 Group
-    // -----------------------------------------------------
-
-    uiEvents.onGroupClick =
+    auto loadGroup =
         [&](int groupIndex)
+    {
+        // --------------------------------------
+        // 获取 Group
+        // --------------------------------------
+
+        const GroupInfo* group =
+            groupManager.getGroup(
+                groupIndex
+            );
+
+
+        if (group == nullptr)
         {
-            const GroupInfo* group =
-                groupManager.getGroup(
-                    groupIndex
+            imageManager.clear();
+
+            mainUi.clearCompareImages();
+
+            return;
+        }
+
+
+        // --------------------------------------
+        // 从 Group Folder 加载图片
+        // --------------------------------------
+
+        if (
+            !imageManager.loadGroup(
+                group->path
+            )
+        )
+        {
+            std::cerr
+                << "Failed to load group images: "
+                << imageManager.getLastError()
+                << '\n';
+
+
+            mainUi.clearCompareImages();
+
+            return;
+        }
+
+
+        // --------------------------------------
+        // ImageInfo -> UiImage
+        // --------------------------------------
+
+        std::vector<UiImage> uiImages;
+
+
+        uiImages.reserve(
+            imageManager
+                .getImages()
+                .size()
+        );
+
+
+        for (
+            const auto& image :
+            imageManager.getImages()
+        )
+        {
+            UiImage uiImage;
+
+
+            // OpenGL Texture ID
+            uiImage.textureId =
+                static_cast<ImTextureID>(
+                    image.texture.id
                 );
 
 
-            if (group == nullptr)
-            {
-                return;
-            }
+            uiImage.width =
+                image.texture.width;
 
 
-            std::cout
-                << "Selected group "
-                << groupIndex + 1
-                << ": "
-                << group->name
-                << '\n';
+            uiImage.height =
+                image.texture.height;
 
 
-            std::cout
-                << "Group path: "
-                << group->path
-                << '\n';
+            // 暂时不显示文件名。
+            //
+            // 后续如果需要，可以在这里设置：
+            //
+            // uiImage.name = ...
+            //
+            // 目前保持为空。
+            uiImage.name.clear();
 
 
-            // ==================================
-            // TODO
-            //
-            // 下一阶段在这里根据：
-            //
-            // group->path
-            //
-            // 扫描当前 Group 下的图片。
-            //
-            // 例如未来：
-            //
-            // imageManager.loadGroup(group->path);
-            //
-            // 然后：
-            //
-            // mainUi.setCompareImages(...);
-            //
-            // ==================================
-        };
+            uiImages.push_back(
+                std::move(
+                    uiImage
+                )
+            );
+        }
 
 
-    // -----------------------------------------------------
-    // 注册 UI Events
-    // -----------------------------------------------------
+        // --------------------------------------
+        // 更新左侧 ComparePanel
+        // --------------------------------------
+
+        mainUi.setCompareImages(
+            uiImages
+        );
+
+
+        // --------------------------------------
+        // Debug
+        // --------------------------------------
+
+        std::cout
+            << "Loaded group "
+            << groupIndex + 1
+            << ", images: "
+            << imageManager.getImageCount()
+            << '\n';
+    };
+
+
+    // =====================================================
+    // 8.2 选择 Group Root Folder
+    // =====================================================
+
+    uiEvents.onSelectGroupFolder =
+        [&]()
+    {
+        groupFolderDialog.open(
+            window
+        );
+    };
+
+
+    // =====================================================
+    // 8.3 重新选择 Group Root Folder
+    // =====================================================
+
+    uiEvents.onReselectGroupFolder =
+        [&]()
+    {
+        groupFolderDialog.open(
+            window,
+            groupManager.getRootPath()
+        );
+    };
+
+
+    // =====================================================
+    // 8.4 点击顶部 Group
+    // =====================================================
+
+    uiEvents.onGroupClick =
+        [&](int groupIndex)
+    {
+        loadGroup(
+            groupIndex
+        );
+    };
+
+
+    // =====================================================
+    // 8.5 点击左侧图片
+    //
+    // 当前只保留事件接口。
+    // 真正业务逻辑以后实现。
+    // =====================================================
+
+    uiEvents.onImageClick =
+        [&](int groupIndex, int imageIndex)
+    {
+        (void)groupIndex;
+
+
+        const ImageInfo* image =
+            imageManager.getImage(
+                imageIndex
+            );
+
+
+        if (image == nullptr)
+        {
+            return;
+        }
+
+
+        // ======================================
+        // TODO:
+        //
+        // 图片点击事件
+        //
+        // 当前可获得：
+        //
+        // groupIndex
+        // imageIndex
+        // image->path
+        //
+        // 后续需要什么行为，
+        // 再在这里接业务逻辑。
+        // ======================================
+    };
+
+
+    // =====================================================
+    // 8.6 注册 UI Events
+    // =====================================================
 
     mainUi.setEvents(
         std::move(
@@ -251,7 +383,10 @@ int runApplication()
 
         while (SDL_PollEvent(&event))
         {
+            // ---------------------------------------------
             // 先让 ImGui 处理输入事件
+            // ---------------------------------------------
+
             ImGui_ImplSDL3_ProcessEvent(
                 &event
             );
@@ -261,7 +396,10 @@ int runApplication()
             // Application Quit
             // ---------------------------------------------
 
-            if (event.type == SDL_EVENT_QUIT)
+            if (
+                event.type ==
+                SDL_EVENT_QUIT
+            )
             {
                 running = false;
             }
@@ -285,7 +423,7 @@ int runApplication()
 
 
         // =================================================
-        // 10.2 Folder Dialog Result
+        // 10.2 Group Folder Dialog Result
         // =================================================
 
         if (
@@ -315,12 +453,27 @@ int runApplication()
 
 
                 // -----------------------------------------
-                // 新的数据源已经载入。
+                // 新 Root 已载入。
                 //
-                // 旧 Group 的图片不应该继续显示。
+                // 旧 Group Texture 和 UI 数据清理。
                 // -----------------------------------------
 
+                imageManager.clear();
+
                 mainUi.clearCompareImages();
+
+
+                // -----------------------------------------
+                // 自动加载第一个 Group
+                // -----------------------------------------
+
+                if (
+                    groupManager.getGroupCount()
+                    > 0
+                )
+                {
+                    loadGroup(0);
+                }
 
 
                 // =========================================
@@ -361,7 +514,9 @@ int runApplication()
                 )
                 {
                     const GroupInfo* group =
-                        groupManager.getGroup(i);
+                        groupManager.getGroup(
+                            i
+                        );
 
 
                     if (group == nullptr)
@@ -460,7 +615,7 @@ int runApplication()
         // -------------------------------------------------
         // 获取实际 framebuffer 尺寸
         //
-        // 对 Retina / High DPI 屏幕更合适
+        // Retina / High DPI
         // -------------------------------------------------
 
         int displayWidth = 0;
@@ -514,6 +669,12 @@ int runApplication()
     // =====================================================
     // 14. Cleanup
     // =====================================================
+
+    // ImageManager 持有 OpenGL Texture。
+    //
+    // 必须在销毁 OpenGL Context 之前释放。
+    imageManager.clear();
+
 
     cleanUp();
 
@@ -611,10 +772,8 @@ bool sdlCreateWindow()
             1280,
             800,
 
-            SDL_WINDOW_OPENGL
-            |
-            SDL_WINDOW_RESIZABLE
-            |
+            SDL_WINDOW_OPENGL |
+            SDL_WINDOW_RESIZABLE |
             SDL_WINDOW_HIGH_PIXEL_DENSITY
         );
 
@@ -760,32 +919,32 @@ bool gladInit()
     std::cout
         << "GLAD loaded OpenGL "
         << GLAD_VERSION_MAJOR(
-            glVersion
-        )
+               glVersion
+           )
         << "."
         << GLAD_VERSION_MINOR(
-            glVersion
-        )
+               glVersion
+           )
         << '\n';
 
 
     std::cout
         << "OpenGL Version: "
         << reinterpret_cast<const char*>(
-            glGetString(
-                GL_VERSION
-            )
-        )
+               glGetString(
+                   GL_VERSION
+               )
+           )
         << '\n';
 
 
     std::cout
         << "OpenGL Renderer: "
         << reinterpret_cast<const char*>(
-            glGetString(
-                GL_RENDERER
-            )
-        )
+               glGetString(
+                   GL_RENDERER
+               )
+           )
         << '\n';
 
 
@@ -912,7 +1071,9 @@ void cleanUp()
 
     ImGui_ImplOpenGL3_Shutdown();
 
+
     ImGui_ImplSDL3_Shutdown();
+
 
     ImGui::DestroyContext();
 

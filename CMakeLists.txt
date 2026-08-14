@@ -53,8 +53,14 @@ add_executable(ImageViewer
     src/app/GroupManager.cpp
     src/app/GroupManager.h
 
+    src/app/ImageManager.cpp
+    src/app/ImageManager.h
+
     src/tools/FolderDialog.cpp
     src/tools/FolderDialog.h
+
+    src/tools/ImageLoader.cpp
+    src/tools/ImageLoader.h
 
 
     # ------------------------------

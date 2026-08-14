@@ -1,7 +1,7 @@
 #include "ui/ComparePanel.h"
 
 #include <algorithm>
-#include <string>
+#include <utility>
 
 #include "imgui.h"
 
@@ -30,11 +30,16 @@ ImVec2 fitImage(
 
     const float scaleX =
         maxWidth /
-        static_cast<float>(width);
+        static_cast<float>(
+            width
+        );
+
 
     const float scaleY =
         maxHeight /
-        static_cast<float>(height);
+        static_cast<float>(
+            height
+        );
 
 
     const float scale =
@@ -59,7 +64,9 @@ void drawTexture(
 #if IMGUI_VERSION_NUM >= 19200
 
     ImGui::Image(
-        ImTextureRef(textureId),
+        ImTextureRef(
+            textureId
+        ),
         size
     );
 
@@ -73,7 +80,6 @@ void drawTexture(
 #endif
 }
 
-
 }
 
 
@@ -81,7 +87,8 @@ void ComparePanel::setImages(
     const std::vector<UiImage>& newImages
 )
 {
-    images = newImages;
+    images =
+        newImages;
 }
 
 
@@ -96,24 +103,32 @@ void ComparePanel::setImageClick(
 )
 {
     imageClick =
-        std::move(callback);
+        std::move(
+            callback
+        );
 }
 
 
 void ComparePanel::draw()
 {
+    // ==========================================
+    // Empty
+    // ==========================================
+
     if (images.empty())
     {
-        ImVec2 avail =
+        const ImVec2 avail =
             ImGui::GetContentRegionAvail();
 
 
         const char* text =
-            "No images in this group";
+            "No images in this group.";
 
 
         const ImVec2 textSize =
-            ImGui::CalcTextSize(text);
+            ImGui::CalcTextSize(
+                text
+            );
 
 
         ImGui::SetCursorPosX(
@@ -122,8 +137,7 @@ void ComparePanel::draw()
             std::max(
                 0.0f,
                 (
-                    avail.x
-                    -
+                    avail.x -
                     textSize.x
                 )
                 *
@@ -139,14 +153,22 @@ void ComparePanel::draw()
         );
 
 
-        ImGui::TextUnformatted(text);
+        ImGui::TextUnformatted(
+            text
+        );
+
 
         return;
     }
 
 
+    // ==========================================
+    // Grid
+    // ==========================================
+
     constexpr float minCardWidth =
         220.0f;
+
 
     constexpr float gap =
         12.0f;
@@ -159,14 +181,12 @@ void ComparePanel::draw()
     int columnCount =
         static_cast<int>(
             (
-                availableWidth
-                +
+                availableWidth +
                 gap
             )
             /
             (
-                minCardWidth
-                +
+                minCardWidth +
                 gap
             )
         );
@@ -183,14 +203,15 @@ void ComparePanel::draw()
         (
             availableWidth
             -
-            gap
-            *
-            (
+            gap *
+            static_cast<float>(
                 columnCount - 1
             )
         )
         /
-        columnCount;
+        static_cast<float>(
+            columnCount
+        );
 
 
     for (
@@ -231,11 +252,14 @@ void ComparePanel::drawImage(
     constexpr float cardHeight =
         240.0f;
 
-    constexpr float imageHeight =
-        190.0f;
+
+    constexpr float imageAreaHeight =
+        195.0f;
 
 
-    ImGui::PushID(index);
+    ImGui::PushID(
+        index
+    );
 
 
     ImGui::BeginChild(
@@ -245,8 +269,7 @@ void ComparePanel::drawImage(
             cardHeight
         ),
         ImGuiChildFlags_Borders,
-        ImGuiWindowFlags_NoScrollbar
-        |
+        ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoScrollWithMouse
     );
 
@@ -265,18 +288,18 @@ void ComparePanel::drawImage(
                 image.width,
                 image.height,
                 innerWidth,
-                imageHeight
+                imageAreaHeight
             );
 
 
+        // 水平居中
         ImGui::SetCursorPosX(
             ImGui::GetCursorPosX()
             +
             std::max(
                 0.0f,
                 (
-                    innerWidth
-                    -
+                    innerWidth -
                     drawSize.x
                 )
                 *
@@ -285,14 +308,14 @@ void ComparePanel::drawImage(
         );
 
 
+        // 垂直居中
         ImGui::SetCursorPosY(
             ImGui::GetCursorPosY()
             +
             std::max(
                 0.0f,
                 (
-                    imageHeight
-                    -
+                    imageAreaHeight -
                     drawSize.y
                 )
                 *
@@ -308,14 +331,15 @@ void ComparePanel::drawImage(
 
 
         clicked =
-            ImGui::IsItemHovered()
-            &&
-            ImGui::IsMouseClicked(
+            ImGui::IsItemClicked(
                 ImGuiMouseButton_Left
             );
 
 
-        if (ImGui::IsItemHovered())
+        // Hover Border
+        if (
+            ImGui::IsItemHovered()
+        )
         {
             ImGui::GetWindowDrawList()
                 ->AddRect(
@@ -327,86 +351,14 @@ void ComparePanel::drawImage(
                 );
         }
     }
-    else
-    {
-        ImGui::InvisibleButton(
-            "##emptyImage",
-            ImVec2(
-                innerWidth,
-                imageHeight
-            )
-        );
 
 
-        clicked =
-            ImGui::IsItemClicked();
-
-
-        const ImVec2 min =
-            ImGui::GetItemRectMin();
-
-        const ImVec2 max =
-            ImGui::GetItemRectMax();
-
-
-        ImGui::GetWindowDrawList()
-            ->AddRect(
-                min,
-                max,
-                ImGui::GetColorU32(
-                    ImGuiCol_Border
-                )
-            );
-
-
-        const char* text =
-            "Image";
-
-
-        const ImVec2 textSize =
-            ImGui::CalcTextSize(text);
-
-
-        ImGui::GetWindowDrawList()
-            ->AddText(
-                ImVec2(
-                    min.x
-                    +
-                    (
-                        max.x
-                        -
-                        min.x
-                        -
-                        textSize.x
-                    )
-                    *
-                    0.5f,
-
-                    min.y
-                    +
-                    (
-                        max.y
-                        -
-                        min.y
-                        -
-                        textSize.y
-                    )
-                    *
-                    0.5f
-                ),
-
-                ImGui::GetColorU32(
-                    ImGuiCol_TextDisabled
-                ),
-
-                text
-            );
-    }
-
+    // ==========================================
+    // 文件名
+    // ==========================================
 
     ImGui::SetCursorPosY(
-        imageHeight
-        +
+        imageAreaHeight +
         12.0f
     );
 
@@ -427,12 +379,18 @@ void ComparePanel::drawImage(
     }
 
 
+    // ==========================================
+    // Click callback
+    // ==========================================
+
     if (
         clicked &&
         imageClick
     )
     {
-        imageClick(index);
+        imageClick(
+            index
+        );
     }
 
 
