@@ -56,11 +56,17 @@ add_executable(ImageViewer
     src/app/ImageManager.cpp
     src/app/ImageManager.h
 
+    src/app/ProcessManager.cpp
+    src/app/ProcessManager.h
+
     src/tools/FolderDialog.cpp
     src/tools/FolderDialog.h
 
     src/tools/ImageLoader.cpp
     src/tools/ImageLoader.h
+
+    src/tools/FileDialog.cpp
+    src/tools/FileDialog.h
 
 
     # ------------------------------

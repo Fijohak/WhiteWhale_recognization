@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -21,11 +22,13 @@
 
 #include "app/GroupManager.h"
 #include "app/ImageManager.h"
+#include "app/ProcessManager.h"
 
 // ==========================================
 // Tools
 // ==========================================
 
+#include "tools/FileDialog.h"
 #include "tools/FolderDialog.h"
 
 // ==========================================
@@ -128,11 +131,29 @@ int runApplication()
 
     MainUi mainUi;
 
+
+    // 左侧 Group 数据
     GroupManager groupManager;
 
+
+    // 左侧 Group 图片
     ImageManager imageManager;
 
+
+    // 右侧 Single / Batch 图片状态
+    ProcessManager processManager;
+
+
+    // 顶部 Group Root 目录选择器
     FolderDialog groupFolderDialog;
+
+
+    // 右侧 Batch 目录选择器
+    FolderDialog batchFolderDialog;
+
+
+    // 右侧 Single 文件选择器
+    FileDialog singleFileDialog;
 
 
     // =====================================================
@@ -143,7 +164,92 @@ int runApplication()
 
 
     // =====================================================
-    // 8.1 加载某一个 Group 的所有图片
+    // 8.1 ImageTexture -> UiImage
+    // =====================================================
+
+    auto makeUiImage =
+        [](const ImageTexture& texture)
+    {
+        UiImage uiImage;
+
+
+        uiImage.textureId =
+            static_cast<ImTextureID>(
+                texture.id
+            );
+
+
+        uiImage.width =
+            texture.width;
+
+
+        uiImage.height =
+            texture.height;
+
+
+        uiImage.name.clear();
+
+
+        return uiImage;
+    };
+
+
+    // =====================================================
+    // 8.2 更新 Single Preview
+    // =====================================================
+
+    auto updateSinglePreview =
+        [&]()
+    {
+        const ImageTexture* texture =
+            processManager.getSingleTexture();
+
+
+        if (texture == nullptr)
+        {
+            mainUi.clearSinglePreview();
+
+            return;
+        }
+
+
+        mainUi.setSinglePreview(
+            makeUiImage(
+                *texture
+            )
+        );
+    };
+
+
+    // =====================================================
+    // 8.3 更新 Batch Preview
+    // =====================================================
+
+    auto updateBatchPreview =
+        [&]()
+    {
+        const ImageTexture* texture =
+            processManager.getBatchTexture();
+
+
+        if (texture == nullptr)
+        {
+            mainUi.clearBatchPreview();
+
+            return;
+        }
+
+
+        mainUi.setBatchPreview(
+            makeUiImage(
+                *texture
+            )
+        );
+    };
+
+
+    // =====================================================
+    // 8.4 加载某一个 Group 的全部图片
     // =====================================================
 
     auto loadGroup =
@@ -170,7 +276,7 @@ int runApplication()
 
 
         // --------------------------------------
-        // 从 Group Folder 加载图片
+        // 加载 Group 图片
         // --------------------------------------
 
         if (
@@ -213,7 +319,6 @@ int runApplication()
             UiImage uiImage;
 
 
-            // OpenGL Texture ID
             uiImage.textureId =
                 static_cast<ImTextureID>(
                     image.texture.id
@@ -228,13 +333,7 @@ int runApplication()
                 image.texture.height;
 
 
-            // 暂时不显示文件名。
-            //
-            // 后续如果需要，可以在这里设置：
-            //
-            // uiImage.name = ...
-            //
-            // 目前保持为空。
+            // 暂时不显示文件名
             uiImage.name.clear();
 
 
@@ -255,10 +354,6 @@ int runApplication()
         );
 
 
-        // --------------------------------------
-        // Debug
-        // --------------------------------------
-
         std::cout
             << "Loaded group "
             << groupIndex + 1
@@ -269,7 +364,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.2 选择 Group Root Folder
+    // 8.5 选择 Group Root Folder
     // =====================================================
 
     uiEvents.onSelectGroupFolder =
@@ -282,7 +377,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.3 重新选择 Group Root Folder
+    // 8.6 重新选择 Group Root Folder
     // =====================================================
 
     uiEvents.onReselectGroupFolder =
@@ -296,7 +391,7 @@ int runApplication()
 
 
     // =====================================================
-    // 8.4 点击顶部 Group
+    // 8.7 点击顶部 Group
     // =====================================================
 
     uiEvents.onGroupClick =
@@ -309,18 +404,14 @@ int runApplication()
 
 
     // =====================================================
-    // 8.5 点击左侧图片
+    // 8.8 点击左侧图片
     //
-    // 当前只保留事件接口。
-    // 真正业务逻辑以后实现。
+    // 暂时只保留接口
     // =====================================================
 
     uiEvents.onImageClick =
         [&](int groupIndex, int imageIndex)
     {
-        (void)groupIndex;
-
-
         const ImageInfo* image =
             imageManager.getImage(
                 imageIndex
@@ -336,22 +427,180 @@ int runApplication()
         // ======================================
         // TODO:
         //
-        // 图片点击事件
+        // 左侧图片点击业务
         //
-        // 当前可获得：
+        // 当前可以获得：
         //
         // groupIndex
         // imageIndex
         // image->path
         //
-        // 后续需要什么行为，
-        // 再在这里接业务逻辑。
+        // ======================================
+
+        (void)groupIndex;
+    };
+
+
+    // =====================================================
+    // 8.9 Single - Select Image
+    // =====================================================
+
+    uiEvents.onPickSingle =
+        [&]()
+    {
+        singleFileDialog.open(
+            window
+        );
+    };
+
+
+    // =====================================================
+    // 8.10 Single - Drop Image
+    // =====================================================
+
+    uiEvents.onSingleDrop =
+        [&](const std::string& path)
+    {
+        if (
+            processManager.loadSingle(
+                path
+            )
+        )
+        {
+            updateSinglePreview();
+
+
+            std::cout
+                << "Single image loaded."
+                << '\n';
+        }
+        else
+        {
+            std::cerr
+                << "Failed to load single image: "
+                << processManager.getLastError()
+                << '\n';
+        }
+    };
+
+
+    // =====================================================
+    // 8.11 Single - Confirm
+    //
+    // 暂时只保留接口
+    // =====================================================
+
+    uiEvents.onSingleConfirm =
+        [&]()
+    {
+        // ======================================
+        // TODO:
+        //
+        // Single Confirm
+        //
         // ======================================
     };
 
 
     // =====================================================
-    // 8.6 注册 UI Events
+    // 8.12 Batch - Select Folder
+    // =====================================================
+
+    uiEvents.onPickFolder =
+        [&]()
+    {
+        batchFolderDialog.open(
+            window
+        );
+    };
+
+
+    // =====================================================
+    // 8.13 Batch - Previous
+    // =====================================================
+
+    uiEvents.onBatchPrev =
+        [&]()
+    {
+        if (
+            processManager.prevBatch()
+        )
+        {
+            updateBatchPreview();
+
+
+            std::cout
+                << "Batch image: "
+                << processManager.getBatchIndex() + 1
+                << " / "
+                << processManager.getBatchCount()
+                << '\n';
+        }
+    };
+
+
+    // =====================================================
+    // 8.14 Batch - Next
+    // =====================================================
+
+    uiEvents.onBatchNext =
+        [&]()
+    {
+        if (
+            processManager.nextBatch()
+        )
+        {
+            updateBatchPreview();
+
+
+            std::cout
+                << "Batch image: "
+                << processManager.getBatchIndex() + 1
+                << " / "
+                << processManager.getBatchCount()
+                << '\n';
+        }
+    };
+
+
+    // =====================================================
+    // 8.15 Batch - Confirm
+    //
+    // 暂时只保留接口
+    // =====================================================
+
+    uiEvents.onBatchConfirm =
+        [&]()
+    {
+        // ======================================
+        // TODO:
+        //
+        // Batch Confirm
+        //
+        // ======================================
+    };
+
+
+    // =====================================================
+    // 8.16 New Category
+    //
+    // 暂时只保留接口
+    // =====================================================
+
+    uiEvents.onNewCategory =
+        [&]()
+    {
+        // ======================================
+        // TODO:
+        //
+        // Create New Category
+        //
+        // ======================================
+    };
+
+
+    // =====================================================
+    // 8.17 注册 UI Events
     // =====================================================
 
     mainUi.setEvents(
@@ -384,7 +633,7 @@ int runApplication()
         while (SDL_PollEvent(&event))
         {
             // ---------------------------------------------
-            // 先让 ImGui 处理输入事件
+            // 先让 ImGui 处理输入
             // ---------------------------------------------
 
             ImGui_ImplSDL3_ProcessEvent(
@@ -419,6 +668,28 @@ int runApplication()
             {
                 running = false;
             }
+
+
+            // ---------------------------------------------
+            // Single Image Drag & Drop
+            //
+            // MainUi -> ProcessPanel 会判断
+            // 当前是不是 Single 模式。
+            // ---------------------------------------------
+
+            if (
+                event.type ==
+                    SDL_EVENT_DROP_FILE
+                &&
+                event.drop.data != nullptr
+            )
+            {
+                mainUi.handleFileDrop(
+                    std::string(
+                        event.drop.data
+                    )
+                );
+            }
         }
 
 
@@ -431,10 +702,6 @@ int runApplication()
                 groupFolderDialog.takePath()
         )
         {
-            // ---------------------------------------------
-            // 扫描 Group Root
-            // ---------------------------------------------
-
             if (
                 groupManager.loadRoot(
                     *selectedPath
@@ -453,9 +720,7 @@ int runApplication()
 
 
                 // -----------------------------------------
-                // 新 Root 已载入。
-                //
-                // 旧 Group Texture 和 UI 数据清理。
+                // 清理旧 Group 图片
                 // -----------------------------------------
 
                 imageManager.clear();
@@ -464,7 +729,7 @@ int runApplication()
 
 
                 // -----------------------------------------
-                // 自动加载第一个 Group
+                // 自动显示第一个 Group
                 // -----------------------------------------
 
                 if (
@@ -476,9 +741,9 @@ int runApplication()
                 }
 
 
-                // =========================================
+                // -----------------------------------------
                 // Debug
-                // =========================================
+                // -----------------------------------------
 
                 std::cout
                     << '\n'
@@ -502,10 +767,6 @@ int runApplication()
                     << "=================================="
                     << '\n';
 
-
-                // -----------------------------------------
-                // 打印所有 Group
-                // -----------------------------------------
 
                 for (
                     int i = 0;
@@ -556,7 +817,7 @@ int runApplication()
 
 
         // =================================================
-        // 10.3 Folder Dialog Error
+        // 10.3 Group Folder Dialog Error
         // =================================================
 
         if (
@@ -565,14 +826,124 @@ int runApplication()
         )
         {
             std::cerr
-                << "Folder dialog error: "
+                << "Group folder dialog error: "
                 << *dialogError
                 << '\n';
         }
 
 
         // =================================================
-        // 10.4 窗口最小化
+        // 10.4 Single Image Dialog Result
+        // =================================================
+
+        if (
+            auto selectedPath =
+                singleFileDialog.takePath()
+        )
+        {
+            if (
+                processManager.loadSingle(
+                    *selectedPath
+                )
+            )
+            {
+                updateSinglePreview();
+
+
+                std::cout
+                    << "Single image loaded."
+                    << '\n';
+            }
+            else
+            {
+                std::cerr
+                    << "Failed to load single image: "
+                    << processManager.getLastError()
+                    << '\n';
+            }
+        }
+
+
+        // =================================================
+        // 10.5 Single Image Dialog Error
+        // =================================================
+
+        if (
+            auto dialogError =
+                singleFileDialog.takeError()
+        )
+        {
+            std::cerr
+                << "Image dialog error: "
+                << *dialogError
+                << '\n';
+        }
+
+
+        // =================================================
+        // 10.6 Batch Folder Dialog Result
+        // =================================================
+
+        if (
+            auto selectedPath =
+                batchFolderDialog.takePath()
+        )
+        {
+            if (
+                processManager.loadBatchFolder(
+                    *selectedPath
+                )
+            )
+            {
+                updateBatchPreview();
+
+
+                std::cout
+                    << "Batch folder loaded."
+                    << '\n';
+
+
+                std::cout
+                    << "Batch images: "
+                    << processManager.getBatchCount()
+                    << '\n';
+
+
+                std::cout
+                    << "Batch image: "
+                    << processManager.getBatchIndex() + 1
+                    << " / "
+                    << processManager.getBatchCount()
+                    << '\n';
+            }
+            else
+            {
+                std::cerr
+                    << "Failed to load batch folder: "
+                    << processManager.getLastError()
+                    << '\n';
+            }
+        }
+
+
+        // =================================================
+        // 10.7 Batch Folder Dialog Error
+        // =================================================
+
+        if (
+            auto dialogError =
+                batchFolderDialog.takeError()
+        )
+        {
+            std::cerr
+                << "Batch folder dialog error: "
+                << *dialogError
+                << '\n';
+        }
+
+
+        // =================================================
+        // 10.8 窗口最小化
         // =================================================
 
         if (
@@ -588,7 +959,7 @@ int runApplication()
 
 
         // =================================================
-        // 10.5 Start ImGui Frame
+        // 10.9 Start ImGui Frame
         // =================================================
 
         ImGui_ImplOpenGL3_NewFrame();
@@ -612,11 +983,9 @@ int runApplication()
         ImGui::Render();
 
 
-        // -------------------------------------------------
-        // 获取实际 framebuffer 尺寸
-        //
-        // Retina / High DPI
-        // -------------------------------------------------
+        // ---------------------------------------------
+        // Retina / High DPI framebuffer size
+        // ---------------------------------------------
 
         int displayWidth = 0;
 
@@ -668,11 +1037,16 @@ int runApplication()
 
     // =====================================================
     // 14. Cleanup
+    //
+    // ImageManager 和 ProcessManager
+    // 都持有 OpenGL Texture。
+    //
+    // 必须先释放 Texture，
+    // 再销毁 OpenGL Context。
     // =====================================================
 
-    // ImageManager 持有 OpenGL Texture。
-    //
-    // 必须在销毁 OpenGL Context 之前释放。
+    processManager.clear();
+
     imageManager.clear();
 
 
