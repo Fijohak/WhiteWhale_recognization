@@ -21,3 +21,6 @@ data/
 .vscode/
 
 70-79/
+
+build
+install
