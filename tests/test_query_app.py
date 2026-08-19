@@ -83,7 +83,9 @@ def make_gallery(tmp: Path, n: int = 8, dim: int = 64,
         images_root=tmp,
         model=None,
         dinov2_weight=None,
+        metric_ckpt=None,
         k=3, threshold=0.45,
+        detect=False,  # 测试关检测裁剪（不加载 YOLO）
     )
     return emb, args
 

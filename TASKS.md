@@ -5,6 +5,8 @@
 > 状态：`[ ]` 待办 / `[x]` 已完成 / `[~]` 进行中
 >
 > **方向调整（2026-08-11）**：原始文件夹结构**不直接等于个体身份**。历史数据整理时工作人员从每个体挑选一张代表照片（Anchor），其余照片混入公共照片池（Pool）。项目第一目标从"训练分类模型"调整为**"Anchor-based 检索 + 人工审核，恢复可信个体目录（Confirmed Individual Catalogue）"**。详见 `docs/anchor_pool_semantics.md`。
+>
+> **任务定位补充（2026-08-17，与数据提供方对齐）**：任务按时间尺度分层——**批内**（同一天）：个体独立、散图池照片有主，做归档分配与池找回（封闭集）；**跨时间**（不同批次）：无全局编号、同体对为**推定**，做历史个体库匹配与**疑似新个体发现**（开放集），结果仅作候选须人工核验。**项目负责人期望：辨别新个体的出现**；跨时间 Re-ID 不作为当前目标。个体特征跨时间会因成长/意外事件漂移（README §5.3 A11–A13、§5.5）。
 
 ---
 
@@ -91,7 +93,7 @@
 | 5.3 | 重新提取特征与聚类 | 用新模型重跑 embedding → 检索 → 聚类 | `outputs/` 更新 | [x] |
 | 5.4 | 难例主动审核 | 低置信边界样本主动学习式人工审核 | 审核记录 | [ ] |
 | 5.5 | 迭代评估 | 微调前后对比检索与聚类指标 | 评价报告 | [x] |
-| 5.6 | 后续升级（2026-08-14 记入） | ① 微调模型 + 跨群 hard negative（用户决策：先做同群划分，微调暂缓）；② 阈值标定需基于微调特征重做 | 待办 | [ ] |
+| 5.6 | 后续升级（2026-08-14 记入） | ① 微调模型 + 跨群 hard negative **已完成**（2026-08-17，r3，实验 E4：验证个体 R@1 0.706→0.765；A 协议 mAP 0.435→0.533；E3 预演 known recall 36-47%→52-61%，三分布分离首次成立）；② 阈值标定需基于微调特征重做——已由 E3/E4 预演完成（FA≤5% 阈值 0.5-0.6） | `scripts/train_metric_learning_hn.py` + `outputs/metric_learning/r3/` | [x] |
 
 ---
 
@@ -99,13 +101,18 @@
 
 | # | 任务 | 说明 | 交付物 | 状态 |
 |---|------|------|--------|------|
-| 6.1 | 背鳍自动检测 | 积累标注后训练检测模型 | `models/detectors/` | [ ] |
+| 6.1 | 背鳍自动检测 | 已落地：SAM vit_b 辅助预标注 199 张 → 人工剔除 30 张 → YOLOv8n 训练（134/33 按 Sequence 划分，fliplr=0，imgsz=1024，早停 62 轮）→ val mAP50=0.635 / R=0.581（2026-08-17，实验 E1） | `models/detectors/yolov8n_dorsalfin.pt` + `scripts/annotate_sam.py` + `scripts/build_yolo_det_dataset.py` + `scripts/train_yolo_detector.py` | [x] |
+| 6.1b | 检测裁剪评估 | 特写 benchmark（B 口径）打平无提升（YOLO 0.310/0.364 vs 中心裁剪 0.304/0.372）；散图 202 张检出 183（90.6%），非特写图泛化可用 → 支撑散图自动归档工作流（实验 E1，结论入 EXPERIMENT_LOG） | `outputs/reports/benchmark_yolo_crop/` + `outputs/crops_yolo/` + `outputs/crops_yolo_pool/` | [x] |
+| 6.1c | 散图归档场景检索对比 | 已落地：202 张散图，中心 0.55 vs YOLO 裁剪；Top1 归档把握度 YOLO 显著更高（中位 0.866 vs 0.812，Wilcoxon p=3.4e-16，低置信 1.0% vs 3.5%），相邻帧互检无显著差异（2026-08-17，实验 E2） | `scripts/eval_pool_archival.py` + `outputs/reports/pool_archival/` | [x] |
 | 6.2 | 自动判断左右侧与质量 | 模型化人工标记 | 模块 | [ ] |
 | 6.3 | 自动特征提取与 Top-K 检索 | 新图 → 检测 → 裁剪 → embedding → 检索 | 检索模块 | [ ] |
 | 6.4 | 未知个体标记 | 低于阈值标记"疑似新个体/需人工判断" | 阈值配置 | [ ] |
 | 6.5 | 人工核验界面 | 确认 / 合并 / 拆分 / 拒绝 / 新个体登记 + 审计 | `src/` 核验界面 | [ ] |
 | 6.6 | 个体目录版本管理 | 可持续更新的个体数据库与历史记录 | 数据库 + 流程文档 | [ ] |
-| 6.7 | 开放集评价 | 已知误判未知率、未知误配已知率、阈值-P/R | 开放集报告 | [ ] |
+| 6.7 | 开放集评价 | 第一步已完成预演（2026-08-17，实验 E3）：01↔03 互检 + 阈值标定；预训练特征无拒识能力（FA≤5% 时 known recall 仅 16-38%），微调特征可用但 known recall 仅 36-47%；正式评价待跨批数据 | `outputs/reports/openset_preview_*/` + `scripts/eval_openset_preview.py` | [~] |
+| 6.8 | 簇级检索（多帧投票） | 评估已完成（2026-08-17，实验 E5：探针/库拆分，多帧投票 vs 单图——库内簇级 R@1 稳定提升 8-12pp，03 群 0.727 vs 0.647，n=22；拒识方向一致但 known 侧 n=6 过薄；发现 known+ 双峰结构）。**真实流程接入已完成**（2026-08-17，实验 E6）：`scripts/pipeline_archival.py` 全流程（检测 → r3 特征 → HDBSCAN → 簇级匹配 → 审核清单/代表图/拼图），散图池验证通过（8 簇 + 89 噪声，2 簇 match、6 簇 suspected，连拍聚簇语义正确，噪声逐图不合并）；散图簇级分数普遍 0.44-0.55 属特征空间现状，阈值 0.58 语义为"宁可多标疑似" | `scripts/eval_cluster_retrieval.py` + `scripts/pipeline_archival.py` + `outputs/reports/cluster_retrieval/` + `outputs/cluster_archival/` | [x] |
+| 6.9 | 工具链接入 | 已落地（2026-08-17）：query_app / assign_pool 统一升级为 r3 跨群 HN 微调特征 + YOLO 检测裁剪（E1/E2/E4 结论落地）；gallery 与散图池特征由 `scripts/extract_r3_yolocrop.py` 预提取；query_app 上传图默认走检测裁剪（--no-detect 可关）、阈值 0.55（E4 标定区间中值）；assign_pool 群内 leave-one-out R@1 01:0.842 / 03:0.912；r3 分数空间整体下移，散图低分占比升高属特征现状，阈值待数据标定 | `src/query_app.py` + `scripts/assign_pool.py` + `scripts/extract_r3_yolocrop.py` + `outputs/embeddings/embeddings_*_r3_yolocrop.npy` | [x] |
+| 6.10 | 多头同框检测（NN relationship 候选 + 多归属归档） | 用户提议（2026-08-18），技术可行已确认：YOLOv8 天然支持多目标，现代码只取 `boxes[0]`（最高置信框），改为取全部框即可。功能：① 画面存在多头海豚时输出**同框候选清单**（NN candidate，弱线索）；② 每个背鳍框各裁一张、各走个体匹配、图片可多归属归档（符合 A13 散图有主语义）。**语义红线：同框多头 ≠ 亲缘关系**（同群≠有亲缘），只能标记"疑似同框关系"供人工判断，绝不自动标亲缘；与 TASKS 0.5（nn relationship 目录含义确认）相关联。**当前数据多为单背鳍特写，价值待真实海上批次验证，暂不实现**；实现时：`detect_and_crop.py` / `pipeline_archival.py` 的 `_detect_all` 加多框支持 + IoU 去重 + `nn_candidates.csv` 输出 | 待办（未实现） | [ ] |
 
 ---
 
@@ -116,7 +123,7 @@
 | D.1 | 跨物种迁移学习方案 | 源域轮廓 vs 目标域纹理的负迁移风险与消融实验设计 | `docs/cetacean_reid_transfer_learning_plan.md` | [x] |
 | D.2 | 参考仓库 SOURCE_MAP | 已核查：CetaMatch(MIT)/MiewID(无LICENSE)/DINOv2(Apache-2.0) 等 | `references/SOURCE_MAP.md` | [~] |
 | D.3 | 数据伦理与合规 | 不公开敏感地点/坐标/未经授权影像；发布前权限检查 | 文档 | [ ] |
-| D.4 | 实验日志 | 每次实验记录配置、结果、结论 | `EXPERIMENT_LOG.md` | [ ] |
+| D.4 | 实验日志 | 每次实验记录配置、结果、结论（E1：YOLOv8 检测器已记录） | `EXPERIMENT_LOG.md` | [x] |
 | D.5 | Anchor/Pool 语义文档 | 方向调整后的数据语义（见阶段 0.10） | `docs/anchor_pool_semantics.md` | [x] |
 
 ---

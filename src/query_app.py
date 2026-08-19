@@ -2,7 +2,7 @@
 本地图库个体查询客户端（Web）。
 
 功能（A+B 三态输出）：
-- 上传单张照片 → 提取特征 → 全库 Top-K 检索；
+- 上传单张照片 → YOLO 背鳍检测裁剪（未检出回退整图）→ r3 特征 → 全库 Top-K 检索；
 - 三态判定（固定阈值）：
     known   → 最高相似度 ≥ 阈值，展示 Top-K 候选；
     unknown → 最高相似度 < 阈值，提示"疑似未知个体（可能新个体）"，
@@ -10,17 +10,19 @@
 - 候选展示：缩略图 + 相似度 + 来源（source_group / session / quality / cluster）；
 - 所有候选一律标注"待人工核验"，不自动判定身份（CLAUDE.md 语义）。
 
+链路（2026-08-17 工具链接入，实验 E1/E2/E4 结论）：gallery 与查询统一为
+"YOLO 检测裁剪 + r3 跨群 HN 微调特征"（散图场景检测裁剪显著更优、特写图打平，
+避免混合语义）。阈值默认 0.55 = E4 标定 FA≤5% 区间 0.5-0.6 中值。
+
 语义约束：
 - 目录名/源分组只是弱信息（source_group），不作为身份；
 - 簇号是 Candidate Cluster，人工确认前不叫个体；
-- 查询模型必须与 gallery 特征同模型（默认 MegaDescriptor），
-  维度不一致时报错提示（跨模型特征不可比）。
+- 查询模型必须与 gallery 特征同模型（同族同权重），维度不一致时报错提示。
 
 用法：
-    python scripts/query_app.py --port 8000
+    python src/query_app.py --port 8000
+    python src/query_app.py --no-detect          # 关掉检测裁剪（整图直查）
     浏览器打开 http://127.0.0.1:8000
-    （DINOv2 查询：--model dinov2 --dinov2-weight D:/dolphin_data/dinov2_weights/dinov2_vitb14_pretrain.pth，
-     但 gallery 特征需先用 DINOv2 重新提取，否则维度/分布不匹配）
 """
 import argparse
 import io
@@ -96,10 +98,11 @@ def resolve_model(args, emb_dim: int) -> str:
         f"无法确定查询模型：gallery 特征由 [{gallery_model}] 提取（--model 可显式指定）。")
 
 
-def build_app(args, embedder=None) -> FastAPI:
+def build_app(args, embedder=None, detector=None) -> FastAPI:
     """构建 FastAPI 应用（延迟构建，便于测试传参数）。
 
     embedder: 可选注入的特征提取器（测试用 mock，避免加载真实模型）。
+    detector: 可选注入的检测器（测试用 mock；None 且 args.detect 时懒加载 YOLO）。
     """
     emb, info = load_gallery(args.embeddings, args.meta, args.pilot)
     gallery_ids = info["image_id"].tolist()
@@ -125,6 +128,15 @@ def build_app(args, embedder=None) -> FastAPI:
             f"跨模型特征不可比，请用与 gallery 相同的模型（当前 gallery 为 "
             f"outputs/embeddings/embedding_config.json 记录的特征）。")
 
+    # YOLO 背鳍检测裁剪：查询图先检测再裁剪（E2：散图场景显著更优，特写图打平）
+    if args.detect:
+        if detector is None:
+            from ultralytics import YOLO
+            detector = YOLO(str(args.det_weights))
+        from scripts.detect_and_crop import expand_box
+    else:
+        detector = None
+
     app = FastAPI(title="中华白海豚个体查询")
     app.state.n_gallery = len(info)
     app.state.model_name = model.name
@@ -140,12 +152,27 @@ def build_app(args, embedder=None) -> FastAPI:
 
     @app.post("/api/query")
     async def query_image(file: UploadFile = File(...)):
-        """上传图片 → 特征 → 全库 Top-K → 三态结果。"""
+        """上传图片 → YOLO 检测裁剪 → 特征 → 全库 Top-K → 三态结果。"""
         raw = await file.read()
         try:
             img = Image.open(io.BytesIO(raw)).convert("RGB")
         except Exception as e:  # noqa: BLE001
             return JSONResponse({"error": f"图片无法读取: {e}"}, status_code=400)
+
+        crop_info = {"detect": False, "fallback": False}
+        if detector is not None:
+            w, h = img.size
+            res = detector.predict(img, conf=args.det_conf, imgsz=args.det_imgsz,
+                                   device=args.det_device, verbose=False)
+            if len(res) and len(res[0].boxes):
+                b = res[0].boxes[0]  # 最高置信度框（ultralytics 按 conf 排序）
+                x0, y0, x1, y1 = [float(v) for v in b.xyxy[0]]
+                box = expand_box(x0, y0, x1, y1, w, h,
+                                 args.det_pad_x, args.det_pad_up, args.det_pad_down)
+                img = img.crop((box[0], box[1], box[0] + box[2], box[1] + box[3]))
+                crop_info = {"detect": True, "fallback": False}
+            else:
+                crop_info = {"detect": True, "fallback": True}  # 未检出 → 整图直查
 
         q_emb = model.encode([img])          # (1, D) L2 归一化
         scores, idx = cosine_topk(q_emb, emb, k=args.k)
@@ -178,6 +205,7 @@ def build_app(args, embedder=None) -> FastAPI:
             "threshold": threshold,
             "max_score": max_score,
             "n_gallery": len(info),
+            "crop": crop_info,
             "candidates": candidates,
         }
 
@@ -207,10 +235,10 @@ def main():
     base = Path(__file__).resolve().parents[1] / "outputs"
     parser = argparse.ArgumentParser(description="本地图库个体查询 Web 客户端")
     parser.add_argument("--embeddings", type=Path,
-                        default=base / "embeddings" / "embeddings_metric.npy",
-                        help="gallery 特征（默认伪标签微调特征，见 embedding_config.json）")
+                        default=base / "embeddings" / "embeddings_metric_r3_yolocrop.npy",
+                        help="gallery 特征（r3 微调 + YOLO 裁剪，见同名 _config.json）")
     parser.add_argument("--meta", type=Path,
-                        default=base / "embeddings" / "embeddings_metric_meta.csv")
+                        default=base / "embeddings" / "embeddings_metric_r3_yolocrop_meta.csv")
     parser.add_argument("--pilot", type=Path, default=base / "pilot" / "pilot_set.csv")
     parser.add_argument("--images-root", type=Path, default=Path("I:/"),
                         help="图片根目录（含 01/ 03/ 子目录）")
@@ -220,11 +248,23 @@ def main():
     parser.add_argument("--dinov2-weight", type=str, default=None,
                         help="DINOv2 官方权重 .pth（gallery 为 dinov2 特征时必填）")
     parser.add_argument("--metric-ckpt", type=Path,
-                        default=base / "metric_learning" / "r1" / "best.pt",
+                        default=base / "metric_learning" / "r3" / "best.pt",
                         help="伪标签微调权重（gallery 为 metric-learning 特征时使用）")
     parser.add_argument("--k", type=int, default=10)
-    parser.add_argument("--threshold", type=float, default=0.60,
-                        help="三态判定阈值（leave-one-out 标定，0.60 平衡覆盖与误报）")
+    parser.add_argument("--threshold", type=float, default=0.55,
+                        help="三态判定阈值（E4 标定 FA≤5% 区间 0.5-0.6 的中值，"
+                             "r3 特征下使用）")
+    parser.add_argument("--detect", action="store_true", default=True,
+                        help="查询图先走 YOLO 背鳍检测裁剪（默认开；未检出回退整图）")
+    parser.add_argument("--no-detect", dest="detect", action="store_false")
+    parser.add_argument("--det-weights", type=Path,
+                        default=Path(__file__).resolve().parents[1] / "models" / "detectors" / "yolov8n_dorsalfin.pt")
+    parser.add_argument("--det-conf", type=float, default=0.25)
+    parser.add_argument("--det-imgsz", type=int, default=1024)
+    parser.add_argument("--det-device", default="cuda")
+    parser.add_argument("--det-pad-x", type=float, default=0.30)
+    parser.add_argument("--det-pad-up", type=float, default=0.15)
+    parser.add_argument("--det-pad-down", type=float, default=0.60)
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--host", default="127.0.0.1")
     args = parser.parse_args()
@@ -233,7 +273,7 @@ def main():
 
     app = build_app(args)
     print(f"[query_app] gallery {app.state.n_gallery} 张 / 模型 {app.state.model_name} / "
-          f"阈值 {args.threshold}")
+          f"阈值 {args.threshold} / 检测裁剪 {'开' if args.detect else '关'}")
     uvicorn.run(app, host=args.host, port=args.port)
 
 

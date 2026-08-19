@@ -81,9 +81,12 @@ class ReIDModel(nn.Module):
 def make_backbone():
     """离线加载 MegaDescriptor（timm hf-hub 缓存已有，不访问外网）。"""
     import os
+
+    # 必须在 import timm 之前设置：huggingface_hub 的 offline 常量在 import 时缓存，
+    # 之后再设 env 无效（实测会发起 HEAD 请求失败）
+    os.environ["HF_HUB_OFFLINE"] = "1"
     import timm
 
-    os.environ["HF_HUB_OFFLINE"] = "1"
     model = timm.create_model("hf-hub:BVRA/MegaDescriptor-T-224",
                               pretrained=True, num_classes=0)
     model.eval()

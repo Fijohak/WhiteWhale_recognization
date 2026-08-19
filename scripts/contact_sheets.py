@@ -62,7 +62,10 @@ def build_contact_sheets(pilot_path: Path, out_dir: Path,
     for gid, sub in groups:
         sub = sub.sort_values("sequence_guess", na_position="last")
         imgs = [load_image(images_root, p) for p in sub["relative_path"]]
-        titles = [f"{r['session_id']}/{r['group_id']} {r['filename']}" for _, r in sub.iterrows()]
+        titles = [
+            f"{r['session_id']}/{r.get('group_id', '')} {Path(r['relative_path']).name}"
+            for _, r in sub.iterrows()
+        ]
         render_sheet(imgs, titles, out_dir / f"anchor_{gid.replace('/', '_')}.jpg")
         n_sheets += 1
         if n_sheets >= max_sheets:
@@ -87,11 +90,12 @@ def build_cluster_contact_sheets(clusters_csv: Path, out_dir: Path,
 
     n_sheets = 0
     for cluster_id, sub in df.groupby("cluster"):
-        sub = sub.sort_values("sequence_guess", na_position="last")
+        if "sequence_guess" in df.columns:  # 散图池等清单无此列，跳过排序
+            sub = sub.sort_values("sequence_guess", na_position="last")
         label = "noise" if cluster_id == -1 else f"cluster_{cluster_id:03d}"
         imgs = [load_image(images_root, p) for p in sub["relative_path"]]
         titles = [
-            f"{r['session_id']}/{r.get('group_id', '')} {r['filename']}"
+            f"{r['session_id']}/{r.get('group_id', '')} {Path(r['relative_path']).name}"
             for _, r in sub.iterrows()
         ]
         render_sheet(imgs, titles, out_dir / f"{label}.jpg")

@@ -28,6 +28,9 @@ outputs/*
 projects/
 scripts/archive/
 
+# YOLO 检测数据集（由 build_yolo_det_dataset.py 重新生成，含图片不入库）
+datasets/
+
 # C++ 确认工具（easy-choose 分支）：构建产物与子模块内容本地保留
 build/
 external/

@@ -161,10 +161,12 @@ class MegaDescriptorMetricAdapter(MegaDescriptorAdapter):
     时一致（Resize 256 + CenterCrop 224），保证查询特征与 gallery 同分布。
     """
 
-    name = "megadescriptor-metric-learning-r1"
+    name = "megadescriptor-metric-learning"  # 实际名含版本：__init__ 动态补全
 
     def __init__(self, ckpt_path: Path | str, device: str = "auto"):
         self.ckpt_path = str(ckpt_path)
+        # 版本名取自权重目录（r1/r2/r3/...），避免硬编码版本
+        self.name = f"{self.name}-{Path(ckpt_path).parent.name}"
         super().__init__(device)
 
     def _load(self):

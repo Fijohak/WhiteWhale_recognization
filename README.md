@@ -162,8 +162,12 @@ I:\01.zip / I:\processed.zip / I:\Processed 2.zip   # 原始压缩包（只读�
 | A8 | txt 计数为全量，目录为整理后子集 | 推测 |
 | A9 | 文件名连拍号 = 连续拍摄序列 | 推测，须抽样核验后用于划分 |
 | A10 | RES+数字（MO 拍摄）无连拍信息 | 推测 |
+| A11 | 跨时间重复拍摄到同一群/同一只海豚（无全局编号） | **推定**（数据提供方，2026-08-17） |
+| A12 | 个体特征跨时间会变化（成长、意外事件致疤痕/轮廓改变） | **推定**（鲸豚领域已知现象） |
+| A13 | 批内散图池照片全部属于本批已确认个体（无新个体混入） | 批内既定；跨批不保证 |
 
 > 所有假设在确认前：不得作为训练标签、不得作为数据划分依据、Manifest 中只能作为带 `_guess` 后缀的启发式字段。
+> 推定（Assumed）与既定（Confirmed）必须区分记录：A11/A12 未经数据验证，不依赖其成立即可运行批内任务。
 
 ### 5.4 数据使用要点
 
@@ -187,6 +191,24 @@ I:\01.zip / I:\processed.zip / I:\Processed 2.zip   # 原始压缩包（只读�
 | 个体 ID | 经人工核验后确认的白海豚身份（Confirmed Individual） |
 | 图像质量  | 图像清晰度、目标大小或人工评分     |
 | 关系备注  | 文件夹名称中记录的候选关联信息     |
+
+### 5.5 任务定位与数据语义（2026-08-17 与数据提供方对齐）
+
+任务按时间尺度分层，批内与跨时间的语义、任务与可靠性不同：
+
+| 尺度 | 数据语义 | 任务 | 可靠性 |
+|---|---|---|---|
+| 批内（同一天调查） | 每个已确认个体可视为独立；散图池照片**有主**（属于本批某已确认个体，A13） | 归档分配、池找回（封闭集） | 特征短期稳定，可靠 |
+| 跨时间（不同日期批次） | 可能重复拍摄到同一群，个体被单独标记但无全局编号；跨时间同体对为**推定**（A11） | 与历史个体库匹配，发现疑似新个体（开放集） | 特征可能漂移（A12），结果仅为候选，须人工核验 |
+
+要点：
+
+* **项目最终目的：加速数据处理环节**（2026-08-17 项目负责人澄清）——输入一批新照片，自动识别同一个个体的图片（批内分组），每簇取最清晰的一张代表图归档，减少工作人员逐张手工整理的工作量；"新个体识别"不是目的，而是低置信度输出的自然副产品；
+* **批内主路径 = 自动归档**：检测背鳍 → 裁剪 → embedding → 批内聚类（Candidate Cluster）→ 每簇选最清晰代表图 → 人工审核确认归档；检索用于"与历史库匹配"（这只见过没），聚类用于"这一批有几只"；
+* 项目负责人期望：辨别新个体的出现（开放集）；跨时间 Re-ID（个体再识别）不作为当前目标；
+* "新个体"判定依赖"认出旧个体"的能力：特征漂移的已知个体（成长、伤病致疤痕/轮廓改变）是最主要的"疑似新个体"假阳性来源，通过多特征通道互补 + 置信度输出 + 人工核验兜底；
+* 跨时间匹配结果默认落在 possibly_same 关系，个体档案记录照片时间戳与特征变化历史，支持专家核验；
+* 跨时间同体对会随批次积累逐步被发现（匹配 + 人工审核），是"新个体发现"阈值标定的依据；在积累之前，阈值保守、多报候选、人工兜底（宁可拆分不可错并）。
 
 ---
 
@@ -478,6 +500,14 @@ p95 从 0.843 压到 0.465（≥0.70 的跨群对从 24.1% → 1.1%）；阈值�
   混入相似个体，审核散图时对"高置信却可疑"的候选应核对多张。
 - 注：模型无多模态能力，以上为人工审核结论，记入 `pool_reviews.csv`
   （reviewer + 时间，可追溯）。
+
+**工具链接入（2026-08-17，TASKS 6.9）**：`assign_pool.py` 与 `query_app.py`
+改用 r3 跨群 HN 微调特征 + YOLO 检测裁剪（实验 E1/E2/E4 结论的落地）：
+散图特征预提取于 `outputs/embeddings/embeddings_pool_r3_yolocrop.npy`，
+gallery 为 `embeddings_metric_r3_yolocrop.npy`（`scripts/extract_r3_yolocrop.py`）。
+群内 leave-one-out R@1 升至 01 群 0.842 / 03 群 0.912（旧预训练特征 0.474/0.570）。
+注意：r3 特征分数空间整体下移（同体分数中位约 0.5，E3 揭示），
+低分疑似新个体占比高于旧链路属特征现状而非故障，阈值（默认 0.50）待数据标定。
 
 ---
 
@@ -809,15 +839,15 @@ chinese-white-dolphin-reid/
 
 ## 20. 离线查询客户端
 
-本地 Web 小工具（`scripts/query_app.py` + `scripts/query_app.html`）：上传一张背鳍照片，对全部 gallery 特征做 Top-K 检索，输出三态判定。
+本地 Web 小工具（`src/query_app.py` + `src/query_app.html`）：上传一张背鳍照片，对全部 gallery 特征做 Top-K 检索，输出三态判定。
 
 ### 20.1 功能
 
-* 上传照片 → 提取特征 → 全库 Top-K 检索（默认 MegaDescriptor，也可用 DINOv2）；
-* 三态判定（固定阈值，默认 0.45）：
+* 上传照片 → YOLO 背鳍检测裁剪（未检出回退整图）→ r3 跨群 HN 微调特征 → 全库 Top-K 检索（2026-08-17 工具链接入：散图场景检测裁剪显著更优 E2、特写图打平 E1，统一链路避免混合语义）；
+* 三态判定（固定阈值，默认 0.55 = E4 标定 FA≤5% 区间 0.5-0.6 中值）：
   * `known`：最高相似度 ≥ 阈值，展示 Top-K 候选（仍需人工核验）；
   * `unknown`：最高相似度 < 阈值，提示"疑似未知个体（可能新个体）"，仍返回 Top-K 供参考；
-* 候选展示：缩略图 + 相似度 + 来源（source_group / session / quality / cluster）；
+* 候选展示：缩略图 + 相似度 + 来源（source_group / session / quality / cluster）+ 本次查询裁剪信息（detect/fallback）；
 * 所有候选一律标注"待人工核验"，不自动判定身份；
 * 模型匹配防护：查询模型必须与 gallery 特征同模型（MegaDescriptor 与 DINOv2 均为 768D 但分布不同，不可直接比较）。
 
@@ -835,17 +865,18 @@ python src/query_app.py --port 8000
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `--embeddings` | `outputs/embeddings/embeddings_metric.npy` | gallery 特征（默认伪标签微调特征） |
-| `--meta` / `--pilot` | `outputs/embeddings/embeddings_metric_meta.csv` / `outputs/pilot/pilot_set.csv` | 追溯字段 |
+| `--embeddings` / `--meta` | `outputs/embeddings/embeddings_metric_r3_yolocrop.npy`（+meta） | gallery 特征（r3 微调 + YOLO 裁剪，`scripts/extract_r3_yolocrop.py` 提取） |
+| `--pilot` | `outputs/pilot/pilot_set.csv` | 追溯字段 |
 | `--images-root` | `I:/` | 源图根目录（候选缩略图用） |
-| `--model` | 自动 | 查询模型；默认按 `embedding_config.json` 自动匹配 gallery 特征模型，显式指定时校验必须同源 |
-| `--metric-ckpt` | `outputs/metric_learning/r1/best.pt` | 伪标签微调权重（gallery 为微调特征时使用） |
+| `--model` | 自动 | 查询模型；默认按 gallery 特征自动匹配，显式指定时校验必须同源 |
+| `--metric-ckpt` | `outputs/metric_learning/r3/best.pt` | 微调权重（gallery 为微调特征时使用） |
 | `--dinov2-weight` | 无 | DINOv2 官方权重 .pth（gallery 为 dinov2 特征时必填） |
-| `--threshold` | `0.60` | known / unknown 判定阈值（leave-one-out 标定） |
+| `--threshold` | `0.55` | known / unknown 判定阈值（E4 标定 FA≤5% 区间 0.5-0.6 中值） |
+| `--detect` / `--no-detect` | 开 | 查询图先走 YOLO 背鳍检测裁剪（默认开；未检出回退整图） |
 | `--k` | `10` | 返回候选数 |
 | `--host` / `--port` | `127.0.0.1` / `8000` | 监听地址 |
 
-> 注意：gallery 特征必须与查询模型同源。默认微调特征需配微调权重（已自动处理）；
+> 注意：gallery 特征必须与查询模型同源。默认 r3+YOLO 裁剪特征需配 r3 微调权重（已自动处理）；
 > 切换回预训练特征时用 `--embeddings outputs/embeddings/embeddings.npy --meta outputs/embeddings/embeddings_meta.csv`，
 > 模型会自动切回预训练 MegaDescriptor。
 
