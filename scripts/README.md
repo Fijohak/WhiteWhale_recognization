@@ -23,6 +23,7 @@
 
 ## 簇级归档管线（真实流程，实验 E6）
 - `pipeline_archival.py` — 新批次全流程：YOLO 检测裁剪 → r3 特征 → HDBSCAN 批内候选聚类 → 簇级多帧投票匹配历史库 → 审核清单 + 代表图 + 候选簇拼图；`--pool` 复用散图池预提取产物验证；`--input-manifest 清单.csv` 跑任意新批次
+- `run_cross_time_batch.py` — 跨时间批次管线驱动（实验 E7）：历史库=20140806 01/03 labeled（Candidate 级）→ YOLO 裁剪 + r3 特征 → 新批次逐个跑 pipeline_archival；`--only-gallery` / `--skip-gallery` / `--sessions` 控制范围；输出 `outputs/cluster_archival/cross_time/<session>/`
 
 ## 散图归档（工具链）
 - `assign_pool.py` — 同群散图划分：散图 r3+YOLO 特征 → 同群已确认个体 Top-K 候选（2026-08-17 起用 r3+YOLO 链路）

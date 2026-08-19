@@ -31,13 +31,27 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
+def _sess_key(s) -> str:
+    """session 标识归一化为字符串：数字（1/1.0）→ "1"；目录名（"20140806 01"）原样保留。
+
+    兼容旧产物（session_id 混存 int 1 / float 1.0）与新命名（日期+群号目录名）。
+    """
+    if pd.isna(s) or str(s).strip() == "":
+        return ""
+    try:
+        f = float(s)
+        return str(int(f)) if f.is_integer() else str(f)
+    except (ValueError, TypeError):
+        return str(s).strip()
+
+
 def load_pool(emb_path: Path, meta_path: Path) -> pd.DataFrame:
     """散图池：预提取的 r3+YOLO 裁剪特征 + meta（image_id / relative_path / session_id）。"""
     pool = pd.read_csv(meta_path)
     emb = np.load(emb_path)
     assert len(pool) == emb.shape[0], "散图特征与 meta 行数不一致"
     pool["_emb"] = list(emb)
-    pool["group"] = pool["session_id"].map({1: "01", 3: "03"})
+    pool["group"] = pool["session_id"].map(_sess_key)
     return pool
 
 
@@ -50,7 +64,7 @@ def load_gallery(emb_path: Path, meta_path: Path):
              & (meta["confirmed_identity"].astype(str).str.strip() != "")].copy()
     idx = [list(meta["image_id"]).index(iid) for iid in g["image_id"]]
     g["emb"] = list(emb[idx])
-    g["group"] = g["session_id"].map({1: "01", 3: "03"})
+    g["group"] = g["session_id"].map(_sess_key)
     return g
 
 

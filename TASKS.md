@@ -18,8 +18,8 @@
 | 0.2 | 解析 `individual.docx` | 确认是否包含人工个体对照结果 | 解析结果记录 | [~] |
 | 0.3 | 确认评分区间含义 | `70-79` / `80 and above` = 历史评分筛选结果，**不代表个体身份** | 结论记录 | [x] |
 | 0.4 | 确认代码含义 | `MO` / `RAY` / `DEREK` = 拍摄者代码 | 结论记录 | [x] |
-| 0.5 | 确认关系目录含义 | `nn relationship`、`sj of 01` 的定义 | 结论记录 | [~] |
-| 0.6 | 确认目录结构 | 01/03 = 同一天两群；processed/Processed 2 已收进 zip | 结论记录 | [x] |
+| 0.5 | 确认关系目录含义 | 已确认（2026-08-19 数据提供方）：`nn relationship` = **疑似**亲缘关系样本（一图两鳍/同框多头）；`sj of 01` = **确定**亲缘关系的两个个体（目录如 `02 （sj of 01)`）。scan_dataset 已分别标记 relation_note=nn_relationship / sj_of | 结论记录 | [x] |
+| 0.6 | 确认目录结构 | 命名规范升级（2026-08-19）：`YYYYMMDD NN`（年月日+空格+群体编号，编号仅当日唯一）——旧数据已改名为 `20140806 01/03`；新批次按此命名。新数据结构精简：仅 `70-79` / `80 and above` / `nn relationship`（低分数据由用户要求忽略）；旧批次后续同样裁剪。session 解析已通用化（scan_dataset session_id = 目录名，去 01/03 硬编码） | 结论记录 | [x] |
 | 0.7 | 确认数字文件夹编号语义 | **子文件夹 = 历史挑选的代表照片（Anchor），不代表全局个体 ID**；跨调查未核验 | 结论记录 | [x] |
 | 0.8 | 确认数据授权 | 是否允许训练、发布模型或公开派生数据 | 结论记录 | [ ] |
 | 0.9 | 编写数据语义与假设文档 | 已确认事实与推测并入 README §5.2–5.3 | `README.md` §5 | [x] |
@@ -110,9 +110,9 @@
 | 6.5 | 人工核验界面 | 确认 / 合并 / 拆分 / 拒绝 / 新个体登记 + 审计 | `src/` 核验界面 | [ ] |
 | 6.6 | 个体目录版本管理 | 可持续更新的个体数据库与历史记录 | 数据库 + 流程文档 | [ ] |
 | 6.7 | 开放集评价 | 第一步已完成预演（2026-08-17，实验 E3）：01↔03 互检 + 阈值标定；预训练特征无拒识能力（FA≤5% 时 known recall 仅 16-38%），微调特征可用但 known recall 仅 36-47%；正式评价待跨批数据 | `outputs/reports/openset_preview_*/` + `scripts/eval_openset_preview.py` | [~] |
-| 6.8 | 簇级检索（多帧投票） | 评估已完成（2026-08-17，实验 E5：探针/库拆分，多帧投票 vs 单图——库内簇级 R@1 稳定提升 8-12pp，03 群 0.727 vs 0.647，n=22；拒识方向一致但 known 侧 n=6 过薄；发现 known+ 双峰结构）。**真实流程接入已完成**（2026-08-17，实验 E6）：`scripts/pipeline_archival.py` 全流程（检测 → r3 特征 → HDBSCAN → 簇级匹配 → 审核清单/代表图/拼图），散图池验证通过（8 簇 + 89 噪声，2 簇 match、6 簇 suspected，连拍聚簇语义正确，噪声逐图不合并）；散图簇级分数普遍 0.44-0.55 属特征空间现状，阈值 0.58 语义为"宁可多标疑似" | `scripts/eval_cluster_retrieval.py` + `scripts/pipeline_archival.py` + `outputs/reports/cluster_retrieval/` + `outputs/cluster_archival/` | [x] |
+| 6.8 | 簇级检索（多帧投票） | 评估已完成（2026-08-17，实验 E5：探针/库拆分，多帧投票 vs 单图——库内簇级 R@1 稳定提升 8-12pp，03 群 0.727 vs 0.647，n=22；拒识方向一致但 known 侧 n=6 过薄；发现 known+ 双峰结构）。**真实流程接入已完成**（2026-08-17，实验 E6）：`scripts/pipeline_archival.py` 全流程（检测 → r3 特征 → HDBSCAN → 簇级匹配 → 审核清单/代表图/拼图），散图池验证通过（8 簇 + 89 噪声，2 簇 match、6 簇 suspected，连拍聚簇语义正确，噪声逐图不合并）；散图簇级分数普遍 0.44-0.55 属特征空间现状，阈值 0.58 语义为"宁可多标疑似"。**真实跨时间批次运行已完成**（2026-08-19，实验 E7）：7 个新批次 270 张 → 20140806 历史库 43 组，首个真实跨时间 match（20151017 03 簇 0 连拍 3 帧 → 20140806 03_1.0，score 0.6495，vote1 0.67）；详见 EXPERIMENT_LOG E7 | `scripts/eval_cluster_retrieval.py` + `scripts/pipeline_archival.py` + `scripts/run_cross_time_batch.py` + `outputs/reports/cluster_retrieval/` + `outputs/cluster_archival/` | [x] |
 | 6.9 | 工具链接入 | 已落地（2026-08-17）：query_app / assign_pool 统一升级为 r3 跨群 HN 微调特征 + YOLO 检测裁剪（E1/E2/E4 结论落地）；gallery 与散图池特征由 `scripts/extract_r3_yolocrop.py` 预提取；query_app 上传图默认走检测裁剪（--no-detect 可关）、阈值 0.55（E4 标定区间中值）；assign_pool 群内 leave-one-out R@1 01:0.842 / 03:0.912；r3 分数空间整体下移，散图低分占比升高属特征现状，阈值待数据标定 | `src/query_app.py` + `scripts/assign_pool.py` + `scripts/extract_r3_yolocrop.py` + `outputs/embeddings/embeddings_*_r3_yolocrop.npy` | [x] |
-| 6.10 | 多头同框检测（NN relationship 候选 + 多归属归档） | 用户提议（2026-08-18），技术可行已确认：YOLOv8 天然支持多目标，现代码只取 `boxes[0]`（最高置信框），改为取全部框即可。功能：① 画面存在多头海豚时输出**同框候选清单**（NN candidate，弱线索）；② 每个背鳍框各裁一张、各走个体匹配、图片可多归属归档（符合 A13 散图有主语义）。**语义红线：同框多头 ≠ 亲缘关系**（同群≠有亲缘），只能标记"疑似同框关系"供人工判断，绝不自动标亲缘；与 TASKS 0.5（nn relationship 目录含义确认）相关联。**当前数据多为单背鳍特写，价值待真实海上批次验证，暂不实现**；实现时：`detect_and_crop.py` / `pipeline_archival.py` 的 `_detect_all` 加多框支持 + IoU 去重 + `nn_candidates.csv` 输出 | 待办（未实现） | [ ] |
+| 6.10 | 多头同框检测（NN relationship 候选 + 多归属归档） | 用户提议（2026-08-18），技术可行已确认：YOLOv8 天然支持多目标，现代码只取 `boxes[0]`（最高置信框），改为取全部框即可。**应用场景已明确**（2026-08-19）：部分批次含 `nn relationship` 目录（**非必有**）= 疑似亲缘关系样本（一图两鳍/同框多头），即本功能直接验证对象。功能：① 同框多头图输出**同框候选清单**（NN candidate，弱线索）；② 每个背鳍框各裁一张、各走个体匹配、图片可多归属归档（符合 A13 散图有主语义）。**语义红线：同框多头 ≠ 亲缘关系**（同群≠有亲缘），只能标记"疑似同框关系"供人工判断，绝不自动标亲缘；与 TASKS 0.5 相关联。实现时：`detect_and_crop.py` / `pipeline_archival.py` 的 `_detect_all` 加多框支持 + IoU 去重 + `nn_candidates.csv` 输出；待新批次全部解压后实现 | 待办（未实现） | [ ] |
 
 ---
 

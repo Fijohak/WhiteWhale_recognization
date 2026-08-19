@@ -60,15 +60,23 @@ def extract(crops_dir: Path, manifest_csv: Path, pilot_csv: Path, out_npy: Path,
     emb /= np.linalg.norm(emb, axis=1, keepdims=True)
     out_npy.parent.mkdir(parents=True, exist_ok=True)
     np.save(out_npy, emb)
-    # meta：pilot 追溯字段 merge；pool 散图不在 pilot 中，session_id 从路径解析
-    meta = m.merge(p[["image_id", "source_group", "session_id", "quality_band",
-                      "confirmed_identity"]], on="image_id", how="left")
-    missing_sess = meta["session_id"].isna()
+    # meta：pilot 追溯字段 merge（pilot_csv 可能是完整 pilot_set.csv 或任意输入清单，
+    # 只 merge 实际存在的列）；散图不在 pilot 中，session_id 从路径首段目录名解析
+    # （兼容旧 "01"/"03" 与新 "20140806 01" 命名，统一存字符串）
+    merge_cols = [c for c in ["image_id", "source_group", "session_id",
+                              "quality_band", "confirmed_identity"]
+                  if c in p.columns]
+    if "session_id" in m.columns:  # 裁剪清单自身已带 session_id，避免 merge 同名冲突
+        merge_cols = [c for c in merge_cols if c != "session_id"]
+    meta = m.merge(p[merge_cols], on="image_id", how="left")
+    missing_sess = meta["session_id"].isna() | (meta["session_id"].astype(str).str.strip() == "")
     if missing_sess.any():
-        meta.loc[missing_sess, "session_id"] = (
-            meta.loc[missing_sess, "relative_path"]
-            .str.extract(r"^(0[13])/")[0].map({"01": 1, "03": 3})
+        # 列先转 object 再赋值（float 列直接写字符串会触发 pandas LossySetitemError）
+        sess = meta["session_id"].astype("object")
+        sess.loc[missing_sess] = (
+            meta.loc[missing_sess, "relative_path"].str.split("/").str[0].to_numpy()
         )
+        meta["session_id"] = sess
     meta.to_csv(out_npy.with_name(out_npy.stem + "_meta.csv"),
                 index=False, encoding="utf-8-sig")
     print(f"[extract] {crops_dir.name}: {len(emb)} 张 → {out_npy} "

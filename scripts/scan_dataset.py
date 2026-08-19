@@ -208,7 +208,13 @@ def classify_path(dir_parts: tuple[str, ...], root_name: str) -> dict[str, Any]:
                 result["label_status"] = "ignored"
             return result
 
-    # 未命中评分区间：MO/RAY/DEREK/miscellaneous/nn relationship 等目录
+    # 未命中评分区间：MO/RAY/DEREK/miscellaneous 等目录；
+    # nn relationship = 疑似亲缘关系样本（一图两鳍，数据提供方 2026-08-19 确认），
+    # 不参与个体分组，仅记录 relation_note 供后续同框多头验证（TASKS 6.10）
+    for part in dir_parts:
+        if normalize_text(part) == "nn relationship":
+            result["relation_note"] = "nn_relationship"
+            break
     result["label_status"] = "ignored"
     return result
 
@@ -305,7 +311,7 @@ def scan_dataset(data_roots: list[Path], output_dir: Path, include_sha256: bool)
                 "extension": extension,
                 "file_size_bytes": path.stat().st_size,
                 "session_guess": session_guess,
-                "session_id": session_guess if session_guess in {"01", "03"} else "",
+                "session_id": session_guess,
                 "date_guess": date_guess,
                 "quality_band": meta["quality_band"],
                 "source_group": source_group,

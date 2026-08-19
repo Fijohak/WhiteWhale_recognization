@@ -179,9 +179,12 @@ def run(args):
     summary = {
         "n_images": int(len(meta)), "n_clusters": n_clusters, "n_noise": n_noise,
         "noise_ratio": round(n_noise / len(meta), 3),
-        "status_counts": cm["status"].value_counts().to_dict(),
-        "cluster_size": {"min": int(cm["n_members"].min()), "median": int(cm["n_members"].median()),
-                         "max": int(cm["n_members"].max())},
+        # 全噪声批次（0 候选簇）时 cluster_rows 为空，按噪声逐图状态汇总
+        "status_counts": (cm["status"].value_counts().to_dict() if cluster_rows
+                          else out_img["status"].value_counts().to_dict()),
+        "cluster_size": ({"min": int(cm["n_members"].min()),
+                          "median": int(cm["n_members"].median()),
+                          "max": int(cm["n_members"].max())} if cluster_rows else {}),
         "threshold": {"cluster": args.threshold_cluster, "image": args.threshold_image},
         "note": "簇 = Candidate Cluster（-1 噪声合法）；match/suspected_new 均为候选，"
                 "须人工核验后才能叫个体。阈值为实验标定参考值。",
