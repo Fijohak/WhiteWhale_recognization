@@ -88,7 +88,7 @@ def run_batch(session: str, m: pd.DataFrame) -> None:
     args = SimpleNamespace(
         pool=False, input_manifest=man, images_root=Path("I:/"), ckpt=CKPT,
         gallery_embeddings=GAL_NPY, gallery_meta=GAL_META,
-        min_cluster_size=3, topk=3,
+        min_cluster_size=3, subcluster_min_size=4, topk=3,
         threshold_cluster=0.58, threshold_image=0.50,
         out=OUT_ROOT, det_weights=DET_WEIGHTS,
         det_conf=0.25, det_imgsz=1024, det_device="cuda",

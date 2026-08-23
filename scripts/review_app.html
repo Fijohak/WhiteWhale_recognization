@@ -17,44 +17,111 @@
                     padding: 4px 10px; border-radius: 14px; cursor: pointer; font-size: 12px; }
   .filters button.active { background: #ffd166; color: #1e3a5f; border-color: #ffd166; font-weight: 600; }
   .hint { font-size: 12px; opacity: .8; margin-left: auto; }
-  main { padding: 16px 20px; }
-  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-  @media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, 1fr); } }
-  .card { background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
-  .card img { width: 100%; height: 170px; object-fit: cover; display: block; background: #ddd; }
-  .card .meta { padding: 6px 10px 2px; font-size: 11px; color: #666; line-height: 1.6; }
-  .card .meta .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; margin-right: 4px;
-                     font-size: 11px; }
-  .card .sim { color: #1e6fa3; font-size: 11px; margin-top: 2px; font-weight: 600; }
-  .tag.cl { background: #e3eaf3; color: #1e3a5f; }
-  .tag.sg { background: #eee; color: #555; }
-  .card .label { padding: 0 10px; font-size: 12px; min-height: 18px; }
-  .label.confirm { color: #1a7f37; font-weight: 600; }
-  .label.uncertain { color: #b8860b; }
-  .label.reject { color: #c22; text-decoration: line-through; }
-  .card .ops { padding: 8px 10px 10px; display: flex; gap: 6px; align-items: center; }
-  .card .ops input { flex: 1; min-width: 0; padding: 5px 8px; border: 1px solid #ccc; border-radius: 6px;
-                     font-size: 12px; }
-  .card .ops button { padding: 5px 10px; border: none; border-radius: 6px; cursor: pointer;
-                      font-size: 12px; font-weight: 600; }
+  main.split { display: flex; gap: 16px; padding: 16px 20px; align-items: flex-start; }
+
+  /* 左栏：待审核（当前簇） */
+  #leftCol { flex: 1.5; min-width: 0; }
+  #rightCol { flex: 1; min-width: 300px; position: sticky; top: 64px;
+              max-height: calc(100vh - 84px); overflow: auto; }
+  #rightCol.hidden { display: none; }
+
+  .cl-card { background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.12);
+             overflow: hidden; border: 2px solid #1e3a5f; }
+  .cl-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #f0f3f8;
+             flex-wrap: wrap; border-bottom: 1px solid #e3e8f0; }
+  .cl-head .name { font-weight: 700; font-size: 14px; color: #1e3a5f; }
+  .badge { padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge.match { background: #1a7f37; color: #fff; }
+  .badge.suspected_new { background: #d9a400; color: #fff; }
+  .badge.noise { background: #999; color: #fff; }
+  .badge.noise_match_candidate { background: #1e6fa3; color: #fff; }
+  .progress-txt { margin-left: auto; font-size: 12px; color: #666; }
+  .sim { color: #8a4b1e; font-size: 12px; font-weight: 600; }
+  /* 簇级置信分级建议：绿=可一键确认，蓝=疑似新个体，橙=松散需逐张，灰=噪声 */
+  .advice { padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .advice-green { background: #e6f6ec; color: #1d7a3e; border: 1px solid #9cd7ae; }
+  .advice-blue { background: #e8f1fb; color: #2456a6; border: 1px solid #a9c8ef; }
+  .advice-orange { background: #fdf1e3; color: #a35d0f; border: 1px solid #f0cd9e; }
+  .advice-gray { background: #f0f0f0; color: #666; border: 1px solid #ddd; }
+  .cl-ops { display: flex; gap: 6px; align-items: center; padding: 10px 14px; flex-wrap: wrap; }
+  .cl-ops input { flex: 1; min-width: 170px; padding: 6px 10px; border: 1px solid #ccc;
+                  border-radius: 6px; font-size: 13px; }
+  .cl-ops button { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer;
+                   font-size: 12px; font-weight: 600; }
   .btn-ok { background: #1a7f37; color: #fff; }
+  .btn-new { background: #6a4fb3; color: #fff; }
   .btn-un { background: #d9a400; color: #fff; }
   .btn-rj { background: #c22; color: #fff; }
   .btn-clear { background: #e5e5e5; color: #666; }
-  .card.done { outline: 2px solid #1a7f37; outline-offset: -2px; }
-  .card.unc { outline: 2px solid #d9a400; outline-offset: -2px; }
-  .card.rej { outline: 2px solid #c22; outline-offset: -2px; opacity: .75; }
-  .card.focused { outline: 3px solid #1e3a5f; outline-offset: -2px; }
-  .card { cursor: pointer; }
+  .cl-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+               gap: 10px; padding: 12px 14px; }
+  .thumb { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid #e0e0e0;
+           cursor: zoom-in; }
+  .thumb img { width: 100%; height: 180px; object-fit: cover; display: block; background: #ddd; }
+  .thumb .mini { position: absolute; left: 0; right: 0; bottom: 0; font-size: 11px; padding: 3px 6px;
+                 background: rgba(0,0,0,.55); color: #fff; display: flex; justify-content: space-between; }
+  .thumb .mini .st { font-weight: 700; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .thumb.st-confirm { outline: 2px solid #1a7f37; }
+  .thumb.st-uncertain { outline: 2px solid #d9a400; }
+  .thumb.st-reject { outline: 2px solid #c22; opacity: .6; }
+  .thumb.low-sim { border: 2px solid #c22; }
+  /* 点选摘出（多选） */
+  .thumb.selected { outline: 3px solid #1e6fa3; }
+  .thumb .chk { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px;
+                border-radius: 50%; background: rgba(0,0,0,.55); color: #fff;
+                display: flex; align-items: center; justify-content: center;
+                font-size: 13px; font-weight: 700; cursor: pointer; user-select: none; }
+  .thumb .chk.on { background: #1e6fa3; }
+  /* 选中操作条 */
+  .sel-bar { display: flex; gap: 6px; align-items: center; padding: 0 14px 12px; flex-wrap: wrap; }
+  .sel-bar.hidden { display: none; }
+  .sel-bar .info { font-size: 12px; color: #1e6fa3; font-weight: 600; }
+  .sel-bar input { flex: 1; min-width: 170px; padding: 6px 10px; border: 1px solid #ccc;
+                   border-radius: 6px; font-size: 13px; }
+  .sel-bar button { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer;
+                    font-size: 12px; font-weight: 600; }
+  .nav { display: flex; gap: 10px; justify-content: center; align-items: center; margin: 14px 0 4px; }
+  .nav button { padding: 8px 18px; border: none; border-radius: 8px; background: #1e3a5f;
+                color: #fff; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .nav button:disabled { background: #b9c2d0; cursor: default; }
+  .nav span { font-size: 12px; color: #666; }
+
+  /* 右栏：历史个体对照 */
+  .his-panel { background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.12);
+               overflow: hidden; }
+  .his-head { padding: 10px 14px; background: #f0f3f8; border-bottom: 1px solid #e3e8f0;
+              display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .his-head .t { font-weight: 700; font-size: 13px; color: #1e3a5f; }
+  .his-head input { flex: 1; min-width: 140px; padding: 5px 8px; border: 1px solid #ccc;
+                    border-radius: 6px; font-size: 12px; }
+  .his-head button { padding: 5px 10px; border: none; border-radius: 6px; background: #1e3a5f;
+                     color: #fff; cursor: pointer; font-size: 11px; font-weight: 600; }
+  .his-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+              gap: 10px; padding: 14px; }
+  .his-item { position: relative; }
+  .his-item img { width: 100%; height: 200px; object-fit: cover; border-radius: 6px; cursor: zoom-in; }
+  .his-item.low img { opacity: .55; filter: grayscale(.6); border: 1px solid #ddd; }
+  .his-tag { position: absolute; top: 6px; left: 6px; background: rgba(120,120,120,.88); color: #fff;
+             font-size: 10px; padding: 2px 8px; border-radius: 10px; pointer-events: none; }
+  .his-q { font-size: 11px; color: #666; display: inline-flex; align-items: center; gap: 4px;
+           cursor: pointer; user-select: none; white-space: nowrap; }
+  .his-tip { padding: 20px; text-align: center; color: #999; font-size: 13px; }
+
   .empty { text-align: center; color: #999; padding: 60px 0; }
-  #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.88); display: none;
+
+  /* 大图预览（含逐张操作） */
+  #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.9); display: none;
               align-items: center; justify-content: center; z-index: 100; cursor: zoom-out; }
-  #lightbox img { max-width: 94vw; max-height: 92vh; object-fit: contain; border-radius: 4px;
+  #lightbox img { max-width: 94vw; max-height: 82vh; object-fit: contain; border-radius: 4px;
                   box-shadow: 0 4px 30px rgba(0,0,0,.5); }
-  .lb-hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
-             color: #ddd; font-size: 13px; opacity: .85; background: rgba(0,0,0,.4);
-             padding: 4px 14px; border-radius: 14px; }
-  .card img { cursor: zoom-in; }
+  .lb-hint { position: absolute; bottom: 92px; left: 50%; transform: translateX(-50%);
+             color: #ddd; font-size: 12px; opacity: .85; background: rgba(0,0,0,.4);
+             padding: 4px 14px; border-radius: 14px; white-space: nowrap; }
+  #lbOps { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+           display: none; gap: 8px; background: rgba(30,58,95,.92); padding: 10px 14px;
+           border-radius: 12px; align-items: center; cursor: default; max-width: 96vw; }
+  #lbOps input { width: 200px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 12px; }
+  #lbOps button { padding: 5px 10px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; }
   kbd { background: #eee; border: 1px solid #ccc; border-radius: 3px; padding: 0 4px; font-size: 11px; }
 </style>
 </head>
@@ -63,36 +130,73 @@
   <h1>🐬 中华白海豚个体审核</h1>
   <span class="progress">已审 <b id="nReview">0</b> / <span id="nTotal">0</span></span>
   <div class="filters" id="filters"></div>
-  <span class="hint">快捷键：<kbd>1</kbd>确认 <kbd>2</kbd>不确定 <kbd>3</kbd>排除</span>
+  <span class="hint">快捷键：<kbd>←→</kbd>切换簇 <kbd>1</kbd>确认 <kbd>2</kbd>不确定 <kbd>3</kbd>排除</span>
 </header>
-<main>
-  <div class="grid" id="grid"></div>
-  <div class="empty" id="empty" style="display:none">没有待审核的照片</div>
+<main class="split">
+  <section id="leftCol">
+    <div id="curCluster"></div>
+    <div class="nav">
+      <button id="prevCl">← 上一簇</button>
+      <span id="clPos"></span>
+      <button id="nextCl">下一簇 →</button>
+    </div>
+    <div class="empty" id="empty" style="display:none">没有待审核的照片</div>
+  </section>
+  <section id="rightCol">
+    <div class="his-panel">
+      <div class="his-head">
+        <span class="t">历史个体对照</span>
+        <label class="his-q" title="低质对照图（未检出背鳍/置信过低/模糊）显示灰色角标"><input type="checkbox" id="hideLowQ" checked> 隐藏低质量</label>
+        <input id="hisInput" placeholder="个体名（如 20140806 03_1.0）">
+        <button id="hisLoad">加载</button>
+      </div>
+      <div class="his-grid" id="hisGrid">
+        <div class="his-tip">左侧选择簇后，此处自动显示建议历史个体的全部照片</div>
+      </div>
+    </div>
+  </section>
 </main>
 <div id="lightbox">
   <img id="lbImg" alt="原图">
   <div class="lb-hint">点击任意处或按 Esc 关闭</div>
+  <div id="lbOps" onclick="event.stopPropagation()">
+    <input id="lbInput" placeholder="个体名">
+    <button class="btn-ok" onclick="lbAnnotate('confirm')">确认</button>
+    <button class="btn-un" onclick="lbAnnotate('uncertain')">不确定</button>
+    <button class="btn-rj" onclick="lbAnnotate('reject')">排除</button>
+    <button class="btn-clear" onclick="lbAnnotate('clear')">清除</button>
+  </div>
 </div>
 <script>
 let STATE = null;
 let curFilter = "all";
-let focusIdx = 0;
+let clusters = [];      // 当前筛选下的簇 key 列表（有序）
+let curIdx = 0;         // 当前浏览的簇在 clusters 中的位置
+let curLbId = null;
+let selected = new Set();   // 点选摘出的照片（同一组，一起标注）
+
+const STATUS_NAME = { match: "匹配", suspected_new: "疑似新个体", noise: "噪声",
+                      noise_match_candidate: "噪声-候选" };
+const STATUS_CLS = { match: "match", suspected_new: "suspected_new", noise: "noise",
+                     noise_match_candidate: "noise_match_candidate" };
 
 async function load() {
   const r = await fetch("/api/state?filter=" + encodeURIComponent(curFilter));
   STATE = await r.json();
   document.getElementById("nReview").textContent = STATE.n_reviewed;
   document.getElementById("nTotal").textContent = STATE.n_total;
+  const rc = document.getElementById("rightCol");
+  rc.classList.toggle("hidden", !STATE.has_history);
   renderFilters();
-  render();
-  focusIdx = 0;
+  rebuildClusterList();
+  renderCurrent();
 }
 
 function renderFilters() {
   const keys = [["all", "全部"], ["unreviewed", "未审"],
     ["reviewed", "已审"], ["noise", "噪声"]];
-  for (const k of Object.keys(STATE.clusters).sort((a, b) => +a - +b))
-    keys.push([k, "簇 " + k]);
+  for (const k of Object.keys(STATE.clusters).sort(keyOrder))
+    if (k !== "noise") keys.push([k, showKey(k)]);
   const box = document.getElementById("filters");
   box.innerHTML = "";
   for (const [k, name] of keys) {
@@ -104,152 +208,449 @@ function renderFilters() {
   }
 }
 
-function clusterName(c) { return c === -1 ? "噪声" : "簇 " + c; }
+/* 审核单元显示名：noise → 噪声；1.0 → 簇 1.0；1.-1 → 簇 1 残噪 */
+function showKey(k) {
+  if (k === "noise") return "噪声";
+  const p = k.split(".");
+  if (p.length < 2) return "簇 " + p[0];
+  return p[1] === "-1" ? "簇 " + p[0] + " 残噪" : "簇 " + p[0] + "." + p[1];
+}
 
-function render() {
-  const grid = document.getElementById("grid");
+/* 单元排序：噪声最后，残噪（.-1）排同簇子簇之后 */
+function keyOrder(a, b) {
+  if (a === "noise") return 1;
+  if (b === "noise") return -1;
+  const pa = a.split("."), pb = b.split(".");
+  const ca = +pa[0] || 0, cb = +pb[0] || 0;
+  if (ca !== cb) return ca - cb;
+  const sa = pa.length > 1 ? +pa[1] : 999;
+  const sb = pb.length > 1 ? +pb[1] : 999;
+  if (sa === -1) return 1;
+  if (sb === -1) return -1;
+  return sa - sb;
+}
+
+/* 当前筛选下的审核单元列表（按 gkey 分组） */
+function rebuildClusterList() {
+  const g = {};
+  for (const p of STATE.photos) (g[p.gkey] = g[p.gkey] || []).push(p);
+  clusters = Object.keys(g).sort(keyOrder);
+  curIdx = 0;
+}
+
+function curPhotos() {
+  return STATE.photos.filter(p => p.gkey === clusters[curIdx]);
+}
+
+function renderCurrent() {
+  selected.clear();   // 换簇/重渲染时清空点选
+  const box = document.getElementById("curCluster");
   const empty = document.getElementById("empty");
-  grid.innerHTML = "";
-  if (!STATE.photos.length) { empty.style.display = "block"; return; }
+  const prev = document.getElementById("prevCl");
+  const next = document.getElementById("nextCl");
+  prev.disabled = curIdx <= 0;
+  next.disabled = curIdx >= clusters.length - 1;
+  document.getElementById("clPos").textContent =
+    (curIdx + 1) + " / " + clusters.length;
+  if (!clusters.length) {
+    box.innerHTML = "";
+    empty.style.display = "block";
+    document.getElementById("hisGrid").innerHTML = "";
+    return;
+  }
   empty.style.display = "none";
-  const cards = [];
-  for (const p of STATE.photos) {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.dataset.imageId = p.image_id;
-    if (p.label) {
-      if (p.label === "uncertain") card.className += " unc";
-      else if (p.label === "reject") card.className += " rej";
-      else card.className += " done";
+  box.innerHTML = "";
+  const photos = curPhotos();
+  window.__curTop1 = photos.length && photos[0].top1 ? photos[0].top1 : "";
+  box.appendChild(buildClusterCard(clusters[curIdx], photos));
+  syncSelBar();
+  autoLoadHistory();
+}
+
+function buildClusterCard(k, photos) {
+  /* k = 审核单元键（noise / 簇号.子簇号；子簇 -1 = 残噪） */
+  const isNoise = k === "noise";
+  const isResidual = !isNoise && k.endsWith(".-1");
+  const cl = isNoise ? -1 : (+k.split(".")[0] || -1);
+  const card = document.createElement("div");
+  card.className = "cl-card";
+
+  const head = document.createElement("div");
+  head.className = "cl-head";
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = showKey(k);
+  head.appendChild(name);
+  const p0 = photos[0];
+  if (p0.status && STATUS_NAME[p0.status]) {
+    const b = document.createElement("span");
+    b.className = "badge " + STATUS_CLS[p0.status];
+    b.textContent = STATUS_NAME[p0.status];
+    head.appendChild(b);
+  }
+  /* 簇级置信分级：簇内相似度中位 ≥0.55 视为紧密簇 → 大概率纯净，可一键确认；
+     松散簇 → 重点逐张；噪声 → 逐个确认。全审完的簇不再给建议 */
+  const _sims = photos
+    .map(p => (p.in_sim === "" || p.in_sim === null ? null : +p.in_sim))
+    .filter(v => v !== null).sort((a, b) => a - b);
+  const _med = _sims.length ? _sims[Math.floor(_sims.length / 2)] : null;
+  const _tight = _med !== null && _med >= 0.55;
+  if (photos.some(x => !x.label)) {
+    const adv = document.createElement("span");
+    let cls = "advice-gray", txt;
+    if (isNoise || isResidual) { txt = "逐个确认，宁缺毋滥"; }
+    /* 无相似度数据（未传 --batch-embeddings）：按模型状态退化，不误导为"松散" */
+    else if (_med === null) {
+      if (p0.status === "match" && p0.top1) { cls = "advice-green"; txt = "✔ 建议整簇确认: " + p0.top1; }
+      else { cls = "advice-blue"; txt = "● 无匹配建议，确认是否新个体"; }
     }
-    cards.push(card);
-    card.addEventListener("click", () => focusCard(cards.indexOf(card)));
+    else if (_tight && p0.status === "match" && (+p0.vote1_ratio || 0) >= 0.5 && p0.top1) {
+      cls = "advice-green"; txt = "✔ 建议整簇确认: " + p0.top1;
+    } else if (_tight) { cls = "advice-blue"; txt = "● 无匹配建议，确认是否新个体"; }
+    else { cls = "advice-orange"; txt = "△ 簇较松散，建议逐张拆分"; }
+    adv.className = "advice " + cls;
+    adv.textContent = txt;
+    head.appendChild(adv);
+  }
+  const nDone = photos.filter(x => x.label).length;
+  const prog = document.createElement("span");
+  prog.className = "progress-txt";
+  prog.textContent = photos.length + " 张 · 已审 " + nDone + "/" + photos.length;
+  head.appendChild(prog);
+  if (p0.top1) {
+    const sug = document.createElement("span");
+    sug.className = "sim";
+    sug.textContent = "建议: " + p0.top1 + " · 分数 " + p0.top1_score +
+                      " · 投票 " + p0.vote1_ratio;
+    head.appendChild(sug);
+  }
+  card.appendChild(head);
+
+  const ops = document.createElement("div");
+  ops.className = "cl-ops";
+  const input = document.createElement("input");
+  input.placeholder = "个体名（默认=建议的历史个体）";
+  input.value = p0.top1 && p0.status === "match" ? p0.top1 : "";
+  const ids = photos.map(x => x.image_id);
+  const mk = (txt, cls, fn) => {
+    const b = document.createElement("button");
+    b.textContent = txt; b.className = cls; b.onclick = fn;
+    return b;
+  };
+  ops.append(input,
+    mk("整簇确认", "btn-ok", () => {
+      if (isNoise) { alert("噪声不是簇（每张可能是不同个体），请点缩略图放大逐张标注"); return; }
+      const v = input.value.trim();
+      if (!v) { alert("请先填写个体名（或点「一键新个体」）"); return; }
+      if (!confirmSameName(v, k)) return;
+      annotateBatch(ids, "confirm", v);
+    }),
+    /* 快速模式：纯子簇未标注照片一键标为 NEW-簇号.子簇号（单元键批次内唯一） */
+    mk("一键新个体", "btn-new", () => {
+      if (isNoise || isResidual) { alert("噪声/残噪不是簇（每张可能是不同个体），请勾选或放大逐张处理"); return; }
+      const un = photos.filter(x => !x.label).map(x => x.image_id);
+      if (!un.length) { alert("本单元照片已全部标注"); return; }
+      annotateBatch(un, "confirm", "NEW-" + k);
+    }),
+    mk("新个体", "btn-new", () => {
+      if (isNoise || isResidual) { alert("噪声/残噪请用勾选或放大逐张标注"); return; }
+      input.value = "NEW-" + k;
+    }),
+    mk("不确定", "btn-un", () => annotateBatch(ids, "uncertain")),
+    mk("排除", "btn-rj", () => annotateBatch(ids, "reject")),
+    mk("清除", "btn-clear", () => annotateBatch(ids, "clear")));
+  card.appendChild(ops);
+
+  /* 簇内排序：已标注的沉底（处理完的不挡视线），未标注的按相似度降序（混入者沉底） */
+  const ordered = [...photos].sort((a, b) => {
+    const sa = a.label ? 1 : 0, sb = b.label ? 1 : 0;
+    if (sa !== sb) return sa - sb;
+    return (b.in_sim || 0) - (a.in_sim || 0);
+  });
+  /* 相对标定：低于簇内中位 0.10 以上 → 可疑混入者（对紧密簇/松散簇都自适应） */
+  const sims = ordered
+    .map(p => (p.in_sim === "" || p.in_sim === null ? null : +p.in_sim))
+    .filter(v => v !== null).sort((a, b) => a - b);
+  const med = sims.length ? sims[Math.floor(sims.length / 2)] : null;
+  const ph = document.createElement("div");
+  ph.className = "cl-photos";
+  for (const p of ordered) ph.appendChild(buildThumb(p, med));
+  card.appendChild(ph);
+
+  /* 选中操作条：把点选的照片（一个个体）摘出来一起标注 */
+  const selBar = document.createElement("div");
+  selBar.className = "sel-bar hidden";
+  const selInfo = document.createElement("span");
+  selInfo.className = "info";
+  const selInput = document.createElement("input");
+  selInput.placeholder = "个体名（默认=建议个体）";
+  selInput.value = p0.top1 && p0.status === "match" ? p0.top1 : "";
+  const mkSel = (txt, cls, fn) => {
+    const b = document.createElement("button");
+    b.textContent = txt; b.className = cls; b.onclick = fn;
+    return b;
+  };
+  selBar.append(selInfo, selInput,
+    mkSel("标注选中", "btn-ok", () => {
+      const v = selInput.value.trim();
+      if (!v) { alert("请先填写个体名"); return; }
+      if (!confirmSameName(v, k)) return;
+      const ids = [...selected];
+      selected.clear();
+      annotateBatch(ids, "confirm", v);
+    }),
+    mkSel("新个体", "btn-new", () => {
+      selInput.value = "NEW-" + k;
+      selInput.focus();
+      selInput.select();
+    }),
+    mkSel("不确定", "btn-un", () => { const ids = [...selected]; selected.clear(); annotateBatch(ids, "uncertain"); }),
+    mkSel("排除", "btn-rj", () => { const ids = [...selected]; selected.clear(); annotateBatch(ids, "reject"); }),
+    mkSel("取消选择", "btn-clear", () => { selected.clear(); renderCurrent(); }));
+  card.appendChild(selBar);
+  card.dataset.selBar = "";
+  return card;
+}
+
+/* 跨单元同名检查（基于后端全局 name_locations，不受当前筛选限制）：
+   名字已在其他审核单元使用 → 弹确认框；用户点「确定」返回 true（同名会被合并成同一只） */
+function confirmSameName(name, curKey) {
+  const loc = STATE.name_locations && STATE.name_locations[name];
+  if (loc && loc.key !== curKey) {
+    return confirm("「" + name + "」已在 " + showKey(loc.key) + " 使用（" + loc.count +
+                   " 张）。跨单元同名会被合并为同一只——确认是同一只吗？");
+  }
+  return true;
+}
+
+function toggleSelect(id) {
+  if (selected.has(id)) selected.delete(id);
+  else selected.add(id);
+  /* 局部更新勾选状态（不整体重渲染） */
+  const thumbs = document.querySelectorAll(".thumb");
+  for (const t of thumbs) {
+    if (t.dataset.iid !== id) continue;
+    const on = selected.has(id);
+    t.classList.toggle("selected", on);
+    const chk = t.querySelector(".chk");
+    if (chk) { chk.classList.toggle("on", on); chk.textContent = on ? "✓" : "＋"; }
+    break;
+  }
+  syncSelBar();
+}
+
+/* 每张缩略图：右上角勾选圈（点选=加入"摘出组"）；点图=放大 */
+function buildThumb(p, clusterMedian) {
+  const d = document.createElement("div");
+  d.className = "thumb";
+  if (p.label === "uncertain") d.className += " st-uncertain";
+  else if (p.label === "reject") d.className += " st-reject";
+  else if (p.label) d.className += " st-confirm";
+  /* 明显低于簇内中位 → 标红：可能混入的别的个体 */
+  const lowSim = p.in_sim !== "" && p.in_sim !== null &&
+    clusterMedian !== null && +p.in_sim < clusterMedian - 0.10;
+  if (lowSim) d.className += " low-sim";
+  if (selected.has(p.image_id)) d.className += " selected";
+  const img = document.createElement("img");
+  img.loading = "lazy";
+  img.src = "/api/image/" + p.image_id;
+  img.title = "点击放大原图（可逐张单独操作）";
+  img.onclick = () => openLightbox(p);
+  const chk = document.createElement("div");
+  chk.className = "chk" + (selected.has(p.image_id) ? " on" : "");
+  chk.textContent = selected.has(p.image_id) ? "✓" : "＋";
+  chk.title = "点选：把这张加入「摘出组」，选好后用下方操作条一起标注";
+  chk.onclick = (e) => { e.stopPropagation(); toggleSelect(p.image_id); };
+  const mini = document.createElement("div");
+  mini.className = "mini";
+  const st = document.createElement("span");
+  st.className = "st";
+  st.textContent = p.label ? (p.label === "uncertain" ? "不确定" :
+                              p.label === "reject" ? "排除" : p.label) : "";
+  const id = document.createElement("span");
+  id.textContent = p.in_sim !== "" && p.in_sim !== null
+    ? (lowSim ? "⚠" + p.in_sim : p.in_sim)
+    : p.image_id.slice(0, 8);
+  mini.append(st, id);
+  d.dataset.iid = p.image_id;
+  d.append(img, chk, mini);
+  return d;
+}
+
+/* 选中状态局部更新（不整体重渲染，保留滚动位置） */
+function syncSelBar() {
+  const bars = document.querySelectorAll(".sel-bar");
+  for (const b of bars) {
+    const n = selected.size;
+    b.classList.toggle("hidden", n === 0);
+    const info = b.querySelector(".info");
+    if (info) info.textContent = "已选 " + n + " 张（同一组的）— ";
+  }
+}
+
+/* 右栏：自动加载当前单元建议的历史个体照片 */
+function autoLoadHistory() {
+  if (!STATE.has_history) return;
+  const k = clusters[curIdx];
+  const p0 = STATE.photos.find(x => x.gkey === k);
+  const individual = p0 && p0.top1 ? p0.top1 : "";
+  document.getElementById("hisInput").value = individual;
+  loadHistory(individual);
+}
+
+async function loadHistory(individual) {
+  const grid = document.getElementById("hisGrid");
+  const v = (individual || "").trim();
+  if (!v) { grid.innerHTML = '<div class="his-tip">（无对照个体）</div>'; return; }
+  grid.innerHTML = '<div class="his-tip">加载中...</div>';
+  const r = await fetch("/api/history/" + encodeURIComponent(v));
+  const d = await r.json();
+  grid.innerHTML = "";
+  if (!d.photos.length) { grid.innerHTML = '<div class="his-tip">（该个体无对照照片）</div>'; return; }
+  const hideLow = document.getElementById("hideLowQ").checked;
+  let shown = 0;
+  for (const ph of d.photos) {
+    const isLow = ph.quality === "low";
+    if (hideLow && isLow) continue;
+    const wrap = document.createElement("div");
+    wrap.className = "his-item" + (isLow ? " low" : "");
     const img = document.createElement("img");
+    img.src = ph.url;
     img.loading = "lazy";
-    img.src = "/api/image/" + p.image_id;
-    img.title = "点击放大（原图）";
-    img.addEventListener("click", (e) => {
-      e.stopPropagation();          // 点击图片=放大，不触发卡片聚焦
-      openLightbox("/api/image/" + p.image_id + "?full=1");
-    });
-    const meta = document.createElement("div");
-    meta.className = "meta";
-    meta.innerHTML = '<span class="tag cl">' + clusterName(p.cluster) + '</span>' +
-      (p.source_group ? '<span class="tag sg">' + p.source_group + '</span>' : "") +
-      (p.session_id ? " 调查 " + p.session_id : "") +
-      (p.quality_band ? " " + p.quality_band : "") +
-      '<br><span style="font-size:10px;color:#aaa">' + p.image_id + '</span>' +
-      (p.similar && p.similar.length
-        ? '<div class="sim">像 ' + p.similar.map(s => s.name + " " + s.score.toFixed(2)).join(" · ") + '</div>'
-        : "");
-    const label = document.createElement("div");
-    label.className = "label " + (p.label === "uncertain" ? "uncertain" : p.label === "reject" ? "reject" : "confirm");
-    label.textContent = { confirm: "已确认: " + p.label, uncertain: "不确定", reject: "已排除" }[p.label] || "";
-    const ops = document.createElement("div");
-    ops.className = "ops";
-    const input = document.createElement("input");
-    input.placeholder = "个体名 如 CI-001";
-    input.value = p.label && !["uncertain", "reject"].includes(p.label) ? p.label : "";
-    const mkBtn = (txt, cls, fn) => {
-      const b = document.createElement("button");
-      b.textContent = txt; b.className = cls;
-      b.onclick = () => { fn(); };
-      return b;
-    };
-    ops.append(input,
-      mkBtn("确认", "btn-ok", () => annotate(p.image_id, "confirm", input.value)),
-      mkBtn("不确定", "btn-un", () => annotate(p.image_id, "uncertain")),
-      mkBtn("排除", "btn-rj", () => annotate(p.image_id, "reject")),
-      mkBtn("清除", "btn-clear", () => annotate(p.image_id, "clear")));
-    card.append(img, meta, label, ops);
-    grid.appendChild(card);
-  }
-  window.__cards = cards;
-  focusCard(0);
-}
-
-/* 焦点卡片：深色边框高亮，键盘操作作用于它 */
-function focusCard(i) {
-  const cards = window.__cards || [];
-  if (!cards.length) return;
-  focusIdx = Math.max(0, Math.min(cards.length - 1, i));
-  cards.forEach((c, j) => c.classList.toggle("focused", j === focusIdx));
-  cards[focusIdx].scrollIntoView({ block: "nearest" });
-}
-
-async function annotate(imageId, action, identity) {
-  if (action === "confirm") {
-    const nm = (identity || "").trim();
-    if (nm) {
-      // 重名确认：该名字已用于其他照片时提醒（防把不同个体错合并 / 确认跨簇同体）
-      const others = STATE.photos.filter(x => x.image_id !== imageId && x.label === nm);
-      if (others.length) {
-        const grp = [...new Set(others.map(o => o.cluster))].map(c => c === -1 ? "噪声" : "簇" + c).join("、");
-        if (!confirm('个体名 "' + nm + '" 已用于 ' + others.length + ' 张照片（' + grp + '）。\n确认它们是同一只海豚？\n确定=继续标记，取消=重新命名'))
-          return;
-      }
+    img.title = ph.name + (isLow ? "（低质量：背鳍不清晰，仅供参考）" : "");
+    img.onclick = () => openLbUrl(ph.url);
+    wrap.appendChild(img);
+    if (isLow) {
+      const tag = document.createElement("span");
+      tag.className = "his-tag";
+      tag.textContent = "模糊";
+      wrap.appendChild(tag);
     }
+    grid.appendChild(wrap);
+    shown++;
   }
-  const r = await fetch("/api/annotate", {
+  if (!shown) grid.innerHTML = '<div class="his-tip">（该个体对照照片全是低质量，取消上方勾选可查看）</div>';
+}
+document.getElementById("hisLoad").onclick = () =>
+  loadHistory(document.getElementById("hisInput").value);
+document.getElementById("hideLowQ").onchange = () =>
+  loadHistory(document.getElementById("hisInput").value);
+
+/* 整簇批量标注 */
+async function annotateBatch(ids, action, identity) {
+  const r = await fetch("/api/annotate_batch", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image_id: imageId, action, identity: identity || "" })
+    body: JSON.stringify({ image_ids: ids, action, identity: identity || "" })
   });
   const d = await r.json();
   if (d.error) { alert(d.error); return; }
   document.getElementById("nReview").textContent = d.n_reviewed;
-  // 局部更新该卡片（不重建列表 → 保持滚动位置）
-  const card = document.querySelector('.card[data-image-id="' + imageId + '"]');
-  if (card) {
-    const p = STATE.photos.find(x => x.image_id === imageId);
-    if (p) p.label = d.label;
-    card.className = "card";
-    if (d.label === "uncertain") card.className += " unc";
-    else if (d.label === "reject") card.className += " rej";
-    else if (d.label) card.className += " done";
-    card.querySelector(".label").textContent =
-      d.label ? (d.label === "uncertain" ? "不确定" :
-                 d.label === "reject" ? "已排除" : "已确认: " + d.label) : "";
-    card.querySelector("input").value =
-      d.label && !["uncertain", "reject"].includes(d.label) ? d.label : "";
+  for (const iid in d.labels) {
+    const p = STATE.photos.find(x => x.image_id === iid);
+    if (p) p.label = d.labels[iid];
   }
+  renderCurrent();
 }
 
-/* 大图放大：点击缩略图 → 原图全屏预览（保持原始比例），点击/Esc 关闭 */
+/* 单张标注（lightbox 逐张操作，拆分场景） */
+async function lbAnnotate(action) {
+  if (!curLbId) return;
+  const identity = action === "confirm" ? document.getElementById("lbInput").value : "";
+  if (action === "confirm" && identity) {
+    const p = STATE.photos.find(x => x.image_id === curLbId);
+    if (p && !confirmSameName(identity, p.gkey)) return;
+  }
+  const r = await fetch("/api/annotate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image_id: curLbId, action, identity })
+  });
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+  document.getElementById("nReview").textContent = d.n_reviewed;
+  const p = STATE.photos.find(x => x.image_id === curLbId);
+  if (p) p.label = d.label;
+  renderCurrent();
+  closeLightbox();
+}
+
+/* 簇导航 */
+document.getElementById("prevCl").onclick = () => { curIdx = Math.max(0, curIdx - 1); renderCurrent(); };
+document.getElementById("nextCl").onclick = () => {
+  curIdx = Math.min(clusters.length - 1, curIdx + 1);
+  renderCurrent();
+};
+
+/* 大图预览 */
 const lb = document.getElementById("lightbox");
 const lbImg = document.getElementById("lbImg");
-function openLightbox(src) {
-  lbImg.src = src;
+function openLightbox(p) {
+  curLbId = p.image_id;
+  lbImg.src = "/api/image/" + p.image_id + "?full=1";
+  /* 默认预填当前簇建议个体名（"像右边"的点确认即可；不像的手动改名） */
+  document.getElementById("lbInput").value =
+    (p.label && !["uncertain", "reject"].includes(p.label) ? p.label : "") ||
+    (window.__curTop1 || "");
+  document.getElementById("lbOps").style.display = "flex";
+  lb.style.display = "flex";
+  document.body.style.overflow = "hidden";
+}
+function openLbUrl(url) {
+  curLbId = null;
+  lbImg.src = url;
+  document.getElementById("lbOps").style.display = "none";
   lb.style.display = "flex";
   document.body.style.overflow = "hidden";
 }
 function closeLightbox() {
   lb.style.display = "none";
   lbImg.src = "";
+  curLbId = null;
   document.body.style.overflow = "";
 }
 lb.addEventListener("click", closeLightbox);
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") { closeLightbox(); return; }
-  const cards = window.__cards || [];
-  const focused = cards[focusIdx];
-  if (!focused) return;
-  const id = focused.dataset.imageId;
-  const input = focused.querySelector("input");
-  /* 输入框内：Enter = 确认（有名字时） */
+  if (lb.style.display === "flex") return;
   if (e.target.tagName === "INPUT") {
-    if (e.key === "Enter" && input.value.trim()) {
+    if (e.key === "Enter") {
+      const input = e.target;
       e.preventDefault();
-      annotate(id, "confirm", input.value);
+      if (input === document.getElementById("lbInput")) {
+        /* lightbox 里回车只确认当前单张（逐张拆分场景的直觉行为） */
+        if (curLbId) lbAnnotate("confirm");
+      } else if (input === document.getElementById("hisInput")) {
+        loadHistory(input.value);
+      } else {
+        const k = clusters[curIdx];
+        if (k === "noise") { alert("噪声不是簇，请点缩略图放大逐张标注"); return; }
+        if (input.value.trim() && confirmSameName(input.value.trim(), k))
+          annotateBatch(curPhotos().map(x => x.image_id), "confirm", input.value.trim());
+      }
     }
     return;
   }
-  if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); focusCard(focusIdx + 1); }
-  else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); focusCard(focusIdx - 1); }
-  else if (e.key === "1") { if (input.value.trim()) annotate(id, "confirm", input.value); }
-  else if (e.key === "2") { annotate(id, "uncertain"); }
-  else if (e.key === "3") { annotate(id, "reject"); }
+  if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+    e.preventDefault();
+    curIdx = Math.min(clusters.length - 1, curIdx + 1);
+    renderCurrent();
+  }
+  else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+    e.preventDefault();
+    curIdx = Math.max(0, curIdx - 1);
+    renderCurrent();
+  }
+  else if (e.key === "1") {
+    const input = document.querySelector(".cl-ops input");
+    const k = clusters[curIdx];
+    if (k === "noise") { alert("噪声不是簇，请点缩略图放大逐张标注"); return; }
+    if (input && input.value.trim() && confirmSameName(input.value.trim(), k))
+      annotateBatch(curPhotos().map(x => x.image_id), "confirm", input.value.trim());
+  }
+  else if (e.key === "2") annotateBatch(curPhotos().map(x => x.image_id), "uncertain");
+  else if (e.key === "3") annotateBatch(curPhotos().map(x => x.image_id), "reject");
 });
 
 load();
