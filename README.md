@@ -1,6 +1,6 @@
 # WhiteWhale_recognization — 中华白海豚个体识别
 
-基于野外调查影像，通过背鳍检测、特征提取与聚类检索，**辅助工作人员将照片按个体分组归档**，并为"这只海豚见过没"提供候选匹配。模型结果一律是 **Candidate（候选）**，正式个体身份须经人工核验（human-in-the-loop）。
+基于野外调查影像，研究可靠的中华白海豚**个体识别方法**（背鳍检测 → 特征学习 → 批内分组聚类 → 跨时间匹配 → 新个体发现），并将方法**落地为辅助归档工具**：输入一批新照片自动按个体分组、每簇取最清晰的一张代表图归档，减少工作人员逐张手工整理的工作量，同时为"这只海豚见过没"提供候选匹配。模型结果一律是 **Candidate（候选）**，正式个体身份须经人工核验（human-in-the-loop）。
 
 ## 1. 核心语义
 
@@ -133,16 +133,52 @@ python scripts/run_cross_time_batch.py --only-gallery        # 只构建历史�
 ## 5. 目录结构
 
 ```text
-src/whitewhale/        # 正式模块（pipeline / detection / reid / review / query / data / config）
-scripts/               # 薄入口（调 src/whitewhale，见上表）
-configs/               # 统一配置（yaml）
-experiments/           # 一次性科研实验脚本（benchmark / 评估预演，可追溯不可复跑正式流程）
-tests/                 # 接口冒烟测试（python -m pytest tests/ -v）
-docs/                  # DATASET.md、anchor_pool_semantics.md、科研计划
-outputs/               # 生成物（不入库）：embeddings/ clusters/ cluster_archival/ review/ ...
-models/                # 模型权重（不入库）
-I:/                    # 原始数据（只读，不入库）
+WhiteWhale_recognization/
+├── README.md                  # 本文档：项目总纲（读一次即可上手）
+├── scripts/                   # 正式入口（薄 wrapper，实现全在 src/whitewhale/）
+│   ├── prepare_data.py        #   1. 数据盘点：scan 生成 manifest / build-pilot
+│   ├── run_pipeline.py        #   2. 批内归档管线（检测→聚类→子簇→匹配→审核材料）
+│   ├── launch_review.py       #   3. 人工审核网页（:8001）
+│   ├── launch_query.py        #   4. 个体查询客户端（:8000）
+│   ├── train_reid.py          #   5. 特征训练（r3 正式链路）
+│   ├── evaluate.py            #   6. 检索指标 / 对级分布评估
+│   ├── run_cross_time_batch.py#   7. 跨时间批次驱动
+│   ├── assign_pool.py         #   同群散图划分（辅助工具）
+│   ├── train_detector.py      #   YOLO 背鳍检测器训练（辅助工具）
+│   ├── build_yolo_det_dataset.py、annotate_sam.py   # 检测数据构建（辅助工具）
+│   └── contact_sheets.py      #   候选簇拼图（备用）
+├── src/whitewhale/            # 正式模块（唯一实现，一个功能一个入口）
+│   ├── pipeline/              #   archival（批内归档）/ cross_time（跨时间）/ assign_pool
+│   ├── detection/             #   YOLO 检测 + 非均匀扩展裁剪（detector.py）
+│   ├── reid/                  #   embedding（模型族+统一提取）/ training / evaluation / retrieval
+│   ├── review/                #   审核网页 app + 拼图 contact_sheets
+│   ├── data/                  #   manifest（扫描+清单）/ dataset（审核数据集）
+│   ├── query.py               #   查询客户端应用
+│   └── config.py              #   yaml 统一加载（load_config）
+├── configs/                   # 统一配置：pipeline.yaml / reid.yaml / detector.yaml
+├── experiments/               # 一次性科研实验（benchmark/评估预演；可追溯，不参与正式流程）
+├── tests/                     # pytest 接口测试（31 个，见 §7）
+├── docs/                      # 深挖资料（见下方"文档导航"）
+├── outputs/                   # 生成物（不入库，可重新生成）
+│   ├── embeddings/            #   特征库（*.npy + meta.csv + config.json）
+│   ├── cluster_archival/      #   归档管线产物（每批次一个子目录：clusters/ 代表图/ 拼图）
+│   ├── review/                #   人工审核标注与确认个体表
+│   ├── metric_learning/       #   训练产物（best.pt / metrics.json）
+│   └── index/ pilot/          #   manifest、pilot 清单
+├── models/                    # 模型权重（不入库）：detectors/（YOLO）
+├── start_query_app.bat        # 双击一键启动查询客户端
+└── I:/                        # 原始数据（只读，不入库，configs/pipeline.yaml 中配置）
 ```
+
+### 文档导航（读一次 README 之后，按需深挖）
+
+| 文档 | 内容 | 何时看 |
+|---|---|---|
+| `docs/DATASET.md` | 数据结构、规模、已确认事实、假设 A1–A13、数据使用规则 | 需要理解数据语义时 |
+| `EXPERIMENT_LOG.md` | E1–E9 实验记录（配置/结果/结论），只追加不修改 | 查历史实验结论时 |
+| `docs/anchor_pool_semantics.md` | Anchor/Pool 语义专项说明（方向调整背景） | 回顾项目方向时 |
+| `docs/cetacean_reid_transfer_learning_plan.md` | 跨物种迁移学习科研计划 | 科研设计时 |
+| `scripts/README.md` | scripts/ 快速导航（本文档 §3 的精简版） | 找脚本时 |
 
 ## 6. 测试
 
@@ -150,9 +186,62 @@ I:/                    # 原始数据（只读，不入库）
 python -m pytest tests/ -v
 ```
 
-覆盖：检索指标（R@k/mAP）、query/gallery 划分防泄漏、拼图输出、审核数据可追溯、查询三态判定与模型匹配防护。
+覆盖：检索指标（R@k/mAP）、query/gallery 划分防泄漏、拼图输出、审核数据可追溯、查询三态判定与模型匹配防护、yaml 配置加载。
 
-## 7. 科研边界
+## 7. 待办（当前）
+
+> 只列待办；已完成任务的记录在 `EXPERIMENT_LOG.md` 与本文档。状态：`[ ]` 待办 / `[~]` 进行中。
+
+**数据与语义**
+
+| # | 任务 | 状态 |
+|---|---|---|
+| 0.8 | 确认数据授权（是否允许训练、发布模型或公开派生数据） | [ ] |
+| 1.8 | 散图分拣（人工待办）：70-79 的 207 张散图人工分配到对应个体文件夹 | [ ] |
+
+**人工基准集**
+
+| # | 任务 | 状态 |
+|---|---|---|
+| 3.1 | 人工核验首批候选簇（确认/拆分/合并/标记未知；首批初审 135 张/31 个体已完成，正式核验待做） | [~] |
+| 3.2 | 建立人工评估集（多个体 × 多日期 × 多角度，按 Sequence 划分） | [ ] |
+| 3.3 | 建立确认关系表（confirmed_same / confirmed_different / possibly_same） | [ ] |
+| 3.4 | 确定可接受错误合并率（优先控制错误合并风险，种群统计低估） | [ ] |
+| 3.5 | Pilot 人工确认集（~20-30 个 Anchor 的同个体照片 2-4 张） | [ ] |
+
+**自监督与轮廓特征**
+
+| # | 任务 | 状态 |
+|---|---|---|
+| 4.1 | 自监督微调（DINOv2 / SimCLR / MoCo / BYOL / MAE 之一） | [ ] |
+| 4.2 | 增强策略设计（谨慎水平翻转，左右侧） | [ ] |
+| 4.3 | 背鳍轮廓特征（CurvRank 风格：缺口、凹陷、曲率） | [ ] |
+| 4.4 | 特征对比（外观/轮廓/融合） | [ ] |
+| 4.5 | 特征可视化与错误分析 | [ ] |
+
+**伪标签与度量学习**
+
+| # | 任务 | 状态 |
+|---|---|---|
+| 5.1 | 生成伪标签（仅高可信确认簇，独立版本化；当前为 Candidate 级初审标签） | [~] |
+| 5.2 | 度量学习训练（ArcFace / Triplet / 对比学习） | [~] |
+| 5.4 | 难例主动审核（低置信边界样本） | [ ] |
+
+**自动化系统**
+
+| # | 任务 | 状态 |
+|---|---|---|
+| 6.2 | 自动判断左右侧与质量（模型化人工标记） | [ ] |
+| 6.10 | 多头同框检测（NN relationship 候选 + 多归属归档）：YOLO 取全部框 + IoU 去重；**语义红线：同框多头 ≠ 亲缘关系**，只能标记疑似供人工判断 | [ ] |
+
+**文档与工程基建**
+
+| # | 任务 | 状态 |
+|---|---|---|
+| D.2 | 参考仓库 SOURCE_MAP（CetaMatch(MIT)/MiewID(无LICENSE)/DINOv2(Apache-2.0) 等） | [~] |
+| D.3 | 数据伦理与合规（不公开敏感地点/坐标/未经授权影像） | [ ] |
+
+## 8. 科研边界
 
 - 一次性实验脚本在 `experiments/`，正式功能一律走 `src/whitewhale/` + 上述入口；
 - 实验结果只追加记录于 `EXPERIMENT_LOG.md`（配置、结果、结论），删除脚本不删除实验记录；
