@@ -1,0 +1,7 @@
+# YOLO 背鳍检测器训练配置（scripts/train_detector.py 默认值，CLI 可覆盖）
+# 数据：datasets/dorsal_fin/（由 scripts/build_yolo_det_dataset.py 构建）
+
+conf: 0.25               # 推理置信度阈值（管线默认）
+imgsz: 1024              # 推理/训练输入尺寸（E1 标定）
+epochs: 100
+device: cuda

@@ -4,6 +4,7 @@
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
 .venv/
 venv/
 
@@ -13,6 +14,12 @@ data/
 *.pt
 *.pth
 *.onnx
+
+# 生成物数据文件（清单/特征/缓存，均可重新生成）
+*.csv
+*.npy
+*.npz
+*.pkl
 
 # 临时与日志
 *.log

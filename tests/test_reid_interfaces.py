@@ -12,11 +12,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "experiments"))
 
-from src.model.reid.dataset.base import DatasetAdapter, ReIDData  # noqa: E402
-from src.model.reid.evaluation.metrics import mean_average_precision, recall_at_k  # noqa: E402
-from src.model.reid.retrieval.cosine import cosine_topk  # noqa: E402
+from pub_reid.dataset.base import DatasetAdapter, ReIDData  # noqa: E402
+from whitewhale.reid.evaluation import mean_average_precision, recall_at_k, split_query_gallery  # noqa: E402
+from whitewhale.reid.retrieval import cosine_topk  # noqa: E402
 
 
 class TestDatasetAdapter(unittest.TestCase):
@@ -129,20 +132,18 @@ class TestSplitQueryGallery(unittest.TestCase):
     """query/gallery 划分防泄漏（同 identity 不共用同图）。"""
 
     def test_split_never_share_image(self):
-        from scripts.pub_reid_benchmark import split_query_gallery
-
         df = pd.DataFrame({"identity": ["a"] * 4 + ["b"] * 2 + ["c"] * 1})
         df["image_path"] = [f"img{i}.jpg" for i in range(len(df))]
         q, g = split_query_gallery(df, identity_col="identity")
-        # 每身份至少 2 张才参与；c 只有 1 张 → 不参与
+        # 每身份至少 2 张才出 query；c 只有 1 张 → 只进 gallery（整图入库）
         self.assertEqual(sorted(q["identity"].unique()), ["a", "b"])
-        # 同身份 query 与 gallery 不共用同图
+        # 同身份 query 与 gallery 不共用同图（q/g 索引不同，按位置比较）
         for iid in ["a", "b"]:
             qi = set(q[q["identity"] == iid].index)
-            gi = set(g[g["identity"] == iid].index)
+            gi = set(g[g["identity"].to_numpy() == iid].index)
             self.assertEqual(len(qi), 1)
             self.assertTrue(qi.isdisjoint(gi))
-        self.assertEqual(len(g), 4)  # 4+2-2=4 张进 gallery
+        self.assertEqual(len(g), 5)  # a:3 + b:1 + c:1 进 gallery
 
 
 class TestContactSheets(unittest.TestCase):
@@ -162,7 +163,7 @@ class TestContactSheets(unittest.TestCase):
 
     def test_cluster_mode_outputs(self):
         """每个候选簇一张拼图 + 噪声一张（-1 不强制并入任何簇）。"""
-        from scripts.contact_sheets import build_cluster_contact_sheets
+        from whitewhale.review.contact_sheets import build_cluster_contact_sheets
 
         with tempfile.TemporaryDirectory() as tmp:
             csv = Path(tmp) / "clusters.csv"
@@ -176,7 +177,7 @@ class TestContactSheets(unittest.TestCase):
 
     def test_load_review_paths_traceable(self):
         """审核数据集必须能从 relative_path 还原绝对路径（可追溯原图）。"""
-        from scripts.fiftyone_review import load_review_dataset
+        from whitewhale.data.dataset import load_review_dataset
 
         with tempfile.TemporaryDirectory() as tmp:
             csv = Path(tmp) / "clusters.csv"

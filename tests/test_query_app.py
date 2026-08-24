@@ -1,5 +1,5 @@
 """
-查询客户端（scripts/query_app.py）接口测试。
+查询客户端（src/whitewhale/query.py）接口测试。
 
 用 mock gallery + mock embedder 覆盖：
 - 三态判定（known / unknown / 阈值边界）；
@@ -21,9 +21,11 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
 
-from src.query_app import build_app, resolve_model  # noqa: E402
+from whitewhale.query import build_app, resolve_model  # noqa: E402
 
 
 class FakeEmbedder:

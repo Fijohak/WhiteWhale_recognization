@@ -1,47 +1,33 @@
 # scripts/ 目录导航
 
-按数据处理流程排序，每个脚本可独立运行（`python scripts/xxx.py --help` 查看参数）。
+正式入口脚本（薄 wrapper），实现逻辑都在 `src/whitewhale/`，默认参数从 `configs/*.yaml` 读取。
+完整用法见根目录 `README.md`（每个脚本可 `python scripts/xxx.py --help` 查看参数）。
 
-## 数据索引
-- `scan_dataset.py` — 扫描原始目录，生成数据清单（manifest）与统计
-- `build_pilot_set.py` — 构建 pilot 数据集（高分 Anchor 照片表 pilot_set.csv）
+## 主流程入口
 
-## 特征与模型
-- `extract_embeddings.py` — 用预训练模型（MegaDescriptor / DINOv2）批量提取特征
-- `extract_r3_yolocrop.py` — 用 r3 模型提取 YOLO 检测裁剪图特征（工具链 gallery / 散图池两份，2026-08-17）
-- `train_metric_learning.py` — 伪标签 ArcFace 度量学习训练；`--extract` 用微调模型重新提取特征
-- `train_metric_learning_hn.py` — 跨群 hard negative 微调（r3，batch 内动态挖掘）
-- `confidence_check.py` — 微调前后置信度体检（对级相似度分布 / 阈值判定 / P@K）
+| 脚本 | 功能 |
+|---|---|
+| `prepare_data.py` | 数据盘点：`scan` 扫描原始目录生成 manifest；`build-pilot` 生成 pilot_set.csv |
+| `run_pipeline.py` | 批内归档管线：YOLO 检测裁剪 → r3 特征 → HDBSCAN → 子簇化 → 簇级投票匹配历史库 → 审核材料（`--pool` 验证模式 / `--input-manifest` 新批次） |
+| `launch_review.py` | 人工审核网页（端口 8001）；`--export` 导出审核结果 |
+| `launch_query.py` | 个体查询客户端（端口 8000）：上传照片 → 检测裁剪 → 检索 → 三态判定 |
+| `train_reid.py` | 特征模型训练（ArcFace 两阶段；`--hard-negative` 默认开 = r3 正式链路；`--extract` 重提特征） |
+| `evaluate.py` | 特征评估（`--mode retrieval` 个体级 R@1/mAP；`--mode pairs` 同/跨个体分布 + FA5% 阈值建议） |
+| `run_cross_time_batch.py` | 跨时间批次驱动：历史库特征 + 逐批次跑批内管线并匹配历史库 |
 
-## 检索与聚类（候选，非身份）
-- `local_reid_benchmark.py` — 本地弱标签检索评估（A 代表图 / B leave-one-out / C 跨序列）
-- `pub_reid_benchmark.py` — 公开数据（Beluga / HappyWhale）检索基线
-- `hdbscan_cluster.py` — HDBSCAN 候选聚类（-1 是合法噪声，结果只能叫 Candidate Cluster）
-- `eval_cluster_retrieval.py` — 簇级检索评估（多帧投票 vs 单图，实验 E5）
-- `eval_openset_preview.py` — 跨群未知个体预演（开放集拒识，实验 E3/E4 复跑）
-- `eval_pool_archival.py` — 散图归档场景检索对比（中心 vs YOLO 裁剪，实验 E2）
+## 工具与训练辅助
 
-## 簇级归档管线（真实流程，实验 E6）
-- `pipeline_archival.py` — 新批次全流程：YOLO 检测裁剪 → r3 特征 → HDBSCAN 批内候选聚类 → 簇级多帧投票匹配历史库 → 审核清单 + 代表图 + 候选簇拼图；`--pool` 复用散图池预提取产物验证；`--input-manifest 清单.csv` 跑任意新批次
-- `run_cross_time_batch.py` — 跨时间批次管线驱动（实验 E7）：历史库=20140806 01/03 labeled（Candidate 级）→ YOLO 裁剪 + r3 特征 → 新批次逐个跑 pipeline_archival；`--only-gallery` / `--skip-gallery` / `--sessions` 控制范围；输出 `outputs/cluster_archival/cross_time/<session>/`
-
-## 散图归档（工具链）
-- `assign_pool.py` — 同群散图划分：散图 r3+YOLO 特征 → 同群已确认个体 Top-K 候选（2026-08-17 起用 r3+YOLO 链路）
-
-## 背鳍检测（工具链）
-- `annotate_sam.py` — SAM vit_b 辅助预标注（人工剔除后进 YOLO 训练）
-- `build_yolo_det_dataset.py` — 构建 YOLO 检测数据集（按 Sequence 划分）
-- `train_yolo_detector.py` — 训练 YOLOv8 背鳍检测器（权重 models/detectors/）
-- `detect_and_crop.py` — YOLO 检测 + 非均匀扩展裁剪（未检出回退中心 0.45 窗）
-
-## 人工审核（已完成，保留复盘）
-- `review_app.py` + `review_app.html` — 自建中文审核网页（端口 8001），审核结果在 `outputs/review/`
-- `fiftyone_review.py` — FiftyOne 审核流程（曾被 review_app 取代）
-
-## 辅助
-- `contact_sheets.py` — 候选簇拼图（已被审核网页取代，保留备用）
+| 脚本 | 功能 |
+|---|---|
+| `assign_pool.py` | 同群散图划分：散图 → 同群已确认个体 Top-K 候选（低分标记疑似新个体） |
+| `contact_sheets.py` | 候选簇拼图（已被审核网页取代，备用） |
+| `train_detector.py` | 训练 YOLO 背鳍检测器（数据由 `build_yolo_det_dataset.py` 构建） |
+| `build_yolo_det_dataset.py` | 构建 YOLO 检测数据集（按 Sequence 划分） |
+| `annotate_sam.py` | SAM vit_b 辅助预标注（人工剔除后进 YOLO 训练） |
 
 ## 约定
-- 所有脚本禁止硬编码本地绝对路径；原始数据（`I:/`）只读；
+
+- 脚本不硬编码本地绝对路径；原始数据（`I:/`）只读；
 - 输出一律带 `image_id` / `relative_path` 可追溯字段；
-- 聚类与检索结果 = Candidate，人工确认后才能叫个体。
+- 聚类与检索结果 = Candidate，人工确认后才能叫个体；
+- 一次性实验脚本在 `experiments/`，正式功能不在 scripts 内堆实验代码。

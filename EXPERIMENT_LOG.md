@@ -1,6 +1,14 @@
 # 实验日志（EXPERIMENT_LOG）
 
 > 每次实验记录配置、结果、结论；所有指标均为弱标签一致性（Source Group ≠ Confirmed Individual），不称识别率。
+>
+> **2026-08-24 重构说明（路径迁移，不影响历史结论）**：正式管线逻辑已收敛到 `src/whitewhale/`，
+> 本日志中提到的旧脚本路径（`scripts/scan_dataset.py`、`scripts/extract_embeddings.py`、
+> `scripts/train_metric_learning*.py`、`scripts/extract_r3_yolocrop.py`、`scripts/pipeline_archival.py`、
+> `scripts/detect_and_crop.py`、`scripts/fiftyone_review.py`、`scripts/review_app.py` 等）已迁移或删除，
+> 对应功能现由 `scripts/prepare_data.py` / `scripts/run_pipeline.py` / `scripts/train_reid.py` /
+> `scripts/launch_review.py` / `scripts/launch_query.py` / `scripts/evaluate.py` 提供
+> （详见 README）。一次性实验脚本在 `experiments/`。实验配置、结果与结论保持原样。
 
 ## 2026-08-17 实验 E1：YOLOv8 背鳍检测器（导师推荐方案）
 

@@ -1,0 +1,16 @@
+# ReID 训练配置（scripts/train_reid.py 默认值，CLI 可覆盖）
+# 两阶段训练：冻结 backbone 训 head → 解冻低学习率微调
+# 默认值 = 重构前 train_metric_learning_hn.py 的默认值（r3 正式训练同参数）
+
+val_n: 6                 # 验证个体数（按个体留出，同一体不跨 train/val）
+seed: 42
+epochs_stage1: 20        # 阶段一：冻结 backbone 训 head
+epochs_stage2: 25        # 阶段二：解冻微调
+lr_head: 0.001
+lr_backbone: 0.000005
+batch: 16
+
+# 跨群 hard negative（r3 链路，正式特征源）
+hard_negative: true      # false = 纯 ArcFace CE（r1/r2 历史链路）
+batches_per_epoch: 40    # 两群对半采样的 batch 数
+lambda_hn: 0.2           # triplet 损失权重（E4 标定）

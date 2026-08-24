@@ -7,8 +7,8 @@ timm
 fastapi
 uvicorn
 python-multipart
+hdbscan            # HDBSCAN 候选聚类（run_pipeline 正式依赖）
 
 # 可选（按需安装）
-# hdbscan          # HDBSCAN 候选聚类
 # faiss-cpu        # Faiss Top-K 加速
-# fiftyone         # 人工审核 App（scripts/fiftyone_review.py）
+# pytest           # 测试（tests/）
