@@ -6,27 +6,147 @@
 
 | 概念 | 说明 |
 |---|---|
-| Anchor / Pool | 高分目录数字子文件夹 = 历史挑选的代表照片（Anchor，非全局个体 ID）；`70-79` 散图 = Unresolved Image Pool（未归属照片池） |
+| 调查批次 | 一次野外调查、日期或航次 |
+| 拍摄序列 | 短时间内连续拍摄的一组照片（连拍）；训练/评估按序列划分，不拆分 |
+| Anchor（代表照片） | 高分目录数字子文件夹 = 历史挑选的个体代表照片，作检索查询；未经确认前不代表身份（非全局个体 ID） |
+| Unresolved Image Pool | `70-79` 散图 = 未归属照片池，作检索 Gallery |
+| 候选分组 | 原数据中人工或程序初步整理出的图片集合（Candidate Cluster） |
 | Candidate ≠ Confirmed | 聚类簇、检索结果都只是候选；人工审核（确认/不确定/拒绝）后才是个体身份 |
+| 个体 ID | 经人工核验后确认的白海豚身份（Confirmed Individual） |
+| 图像质量 | 图像清晰度、目标大小或人工评分（`70-79` / `80 and above` 等评分区间） |
+| 关系备注 | 文件夹名称中记录的候选关联信息 |
 | 批内（同一天） | 封闭集归档：检测 → 聚类 → 每簇选代表图 → 人工审核归档 |
 | 跨时间（不同批次） | 开放集匹配：新批次与历史个体库匹配，低于阈值标记"疑似新个体"；结果仅作候选 |
 | 左右侧分离 | 背鳍两侧特征不同，照片记录朝向（left/right/unknown），左右侧分别比较 |
-| 连拍不泄漏 | 连续拍摄序列不可拆分，训练/评估按序列划分 |
 | 原始数据只读 | 原图在 `I:/` 只读；所有生成物写 `outputs/`，可追溯到原始路径 |
 
-数据集结构、已确认事实与假设详见 [docs/DATASET.md](docs/DATASET.md)。历史实验结果与结论见 [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md)。
+数据集结构、规模、已确认事实与待确认假设见 [§2 数据](#2-数据)。历史实验结果与结论见 [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md)。
 
-## 2. 环境
+## 2. 数据
+
+原始数据（原图）不入库，位于 `I:/`。本节记录数据的结构、规模、已确认事实与待确认假设，是数据理解的参考手册；日常跑系统不需要逐条核对。
+
+### 2.1 目录结构与命名规范
+
+> **命名规范（2026-08-19 起）**：数据根目录名 = `YYYYMMDD NN`（年月日 + 空格 + 群体编号，编号仅当日唯一）。旧数据 `01`/`03` 已改名为 `20140806 01`/`20140806 03`；新批次按此命名（如 `20140418 01`）。
+> **新数据结构精简**：仅 `70-79` / `80 and above`（部分批次含 `nn relationship`，非必有；数据提供方要求忽略低分数据）；旧批次后续同样裁剪为该结构。session 标识 = 目录名本身。
+
+```text
+I:\20140806 01（旧批次，改名自 01；调查 20140417W01，地点代码 SZi，批次 01）
+├── 70-79/                      # 70-79 分组
+│   ├── 05/ 11/ 12/ 13/ 14/     # 子文件夹 = 代表照片 Anchor（5 组，非全局 ID）
+│   └── *.JPG                   # 59 张散图，Unresolved Image Pool（人工跟进中）
+├── 80 and above/               # 80 分及以上
+│   └── 01/ … 10/               # 子文件夹 = 代表照片 Anchor（10 组，28 张）
+├── 50-59/ 60-69/ below 50/     # 低于 70 分，暂不用于训练（后续将裁剪移除）
+├── MO/  miscellaneous/  nn relationship/   # 拍摄者 / 其他目录
+├── 20140417W01.txt             # 调查记录
+└── individual.docx             # 人工对照材料
+
+I:\20140806 03（旧批次，改名自 03；调查 20140417W03，地点代码 HBi，批次 03）
+├── 70-79/
+│   ├── 21/ 22/ 23/ 26/ 28/ 29/ 30/   # 子文件夹 = 代表照片 Anchor（7 组，非全局 ID）
+│   └── *.JPG                   # 148 张散图，Unresolved Image Pool（人工跟进中）
+├── 80 and above/
+│   └── 01/ … 31/               # 子文件夹 = 代表照片 Anchor（22 组，155 张）
+├── DEREK/  MO/  RAY/  miscellaneous/  nn relationship/
+├── 20140417W03.txt
+└── individual.docx
+
+I:\01.zip / I:\processed.zip / I:\Processed 2.zip   # 原始压缩包（只读）
+```
+
+### 2.2 数据规模（2026-08-07 扫描统计）
+
+| 项 | 数量 |
+|---|---|
+| 总图片数 | 2863（01：818，03：2045） |
+| 已分组个体（labeled） | 43 个体 / 199 张（01：14 个，03：29 个） |
+| 70-79 散图（loose_known） | 207 张（01：59，03：148） |
+| 低于 70 分 / 拍摄者目录（ignored） | 2457 张 |
+| 可读图片 / 损坏 | 2863 / 0 |
+| 精确重复组（SHA-256） | 1 组 2 张 |
+
+> 个体数按标签 `{session}_{group_id}` 计，跨调查同名编号未合并。
+> `labeled_individuals`：单图个体 15 个，多图个体 28 个，最大个体 27 张（连拍）。
+
+### 2.3 已确认事实
+
+* **评分区间 = 图片分级**：W01 txt 计数（50-59:14, 60-69:100, 70-79:64, 80+:28）与 `I:\01` 目录图片数逐项一致；
+* **MO / RAY / DEREK = 拍摄者代码**：txt 人员计数明确；
+* **文件名双模式**：RAY 拍摄 `0145_20140417_SZi_01_RAY_0632.JPG`（编号_日期_地点_批次_人员_连拍号）；MO 拍摄 `RES20001.JPG`（无日期字段）；
+* **01 = W01（SZi），03 = W03（HBi）**，同一天两群；
+* **01 与 03 是两个独立海豚群**：分组编号在群内各自独立（01_02 与 03_02 不是同一只），跨群照片默认视为不同个体，除非未来人工确认；
+* **根目录命名 = `YYYYMMDD NN`**（2026-08-19 数据提供方规范）：年月日 + 空格 + 群体编号，编号仅当日唯一（跨日期可重名，session 标识 = 完整目录名）；
+* **`nn relationship` 目录 = 疑似亲缘关系个体样本**（2026-08-19 数据提供方确认，**非每个批次必有**）：一图两鳍（同框多头），不参与个体分组，scan_dataset 标记 relation_note=nn_relationship；亲缘关系仍需人工确认（同框 ≠ 有亲缘）。
+
+### 2.4 待确认假设（A1–A13）
+
+| # | 假设 | 状态 |
+|---|---|---|
+| A1 | 评分区间为质量/匹配置信度分级 | 基本证实（W01 计数一致） |
+| A2 | MO/RAY/DEREK 为拍摄者代码 | 已证实 |
+| A3 | SZi/HBi 为调查地点代码 | 推测 |
+| A4 | 80 and above 数字分组为代表照片（Anchor）而非个体 ID | 已确认（历史整理方式） |
+| A5 | `sj of 01` = 伴随/相关个体关系 | 推测 |
+| A6 | `nn relationship` = 相邻关系候选组 | 推测（txt 字段为空） |
+| A7 | processed / Processed 2 为不同批次 | 推测（SHA256 无重叠） |
+| A8 | txt 计数为全量，目录为整理后子集 | 推测 |
+| A9 | 文件名连拍号 = 连续拍摄序列 | 推测，须抽样核验后用于划分 |
+| A10 | RES+数字（MO 拍摄）无连拍信息 | 推测 |
+| A11 | 跨时间重复拍摄到同一群/同一只海豚（无全局编号） | **推定**（数据提供方，2026-08-17） |
+| A12 | 个体特征跨时间会变化（成长、意外事件致疤痕/轮廓改变） | **推定**（鲸豚领域已知现象） |
+| A13 | 批内散图池照片全部属于本批已确认个体（无新个体混入） | 批内既定；跨批不保证 |
+
+> 所有假设在确认前：不得作为训练标签、不得作为数据划分依据、Manifest 中只能作为带 `_guess` 后缀的启发式字段。
+> 推定（Assumed）与既定（Confirmed）必须区分记录：A11/A12 未经数据验证，不依赖其成立即可运行批内任务。
+
+### 2.5 数据使用要点
+
+* 当前只使用 01 与 03 两个目录中 `70-79`、`80 and above` 两个区间（≥70 分）的数据；
+* 这两个区间下的数字子文件夹 = 历史挑选的代表照片（Anchor），不代表全局个体 ID，可作 Anchor 检索的查询集，不可直接作监督标签；
+* 每个 Anchor 基本只有一张照片（极少数含连拍多帧），属于极端少样本的个体识别问题；
+* `70-79` 散图（207 张）属于 Unresolved Image Pool：同调查内可能属于某个已选代表照片的个体，但具体归属未确认，只能作为检索 Gallery 的候选，不可作标签；
+* 分组编号只在同一调查内有效，01 与 03 之间同名编号是否对应同一只海豚需人工核验；
+* 01 与 03 是同一天（20140417）拍摄的两群海豚，属于两个独立调查批次，跨调查的个体对应关系尚未核验；
+* 背鳍有左右两面，但当前每个个体只有一张照片、尚无双侧样本；照片仍须记录朝向（left / right / unknown），左右侧分别比较。
+
+### 2.6 任务定位与数据语义（2026-08-17 与数据提供方对齐）
+
+任务按时间尺度分层，批内与跨时间的语义、任务与可靠性不同：
+
+| 尺度 | 数据语义 | 任务 | 可靠性 |
+|---|---|---|---|
+| 批内（同一天调查） | 每个已确认个体可视为独立；散图池照片**有主**（属于本批某已确认个体，A13） | 归档分配、池找回（封闭集） | 特征短期稳定，可靠 |
+| 跨时间（不同日期批次） | 可能重复拍摄到同一群，个体被单独标记但无全局编号；跨时间同体对为**推定**（A11） | 与历史个体库匹配，发现疑似新个体（开放集） | 特征可能漂移（A12），结果仅为候选，须人工核验 |
+
+要点：
+
+* **项目目标（两者并存）**：研究个体识别方法 + 落地为辅助归档工具（见开头简介）；"新个体识别"不是独立目的，而是低置信度输出的自然副产品；
+* **批内主路径 = 自动归档**：检测背鳍 → 裁剪 → embedding → 批内聚类（Candidate Cluster）→ 每簇选最清晰代表图 → 人工审核确认归档；检索用于"与历史库匹配"（这只见过没），聚类用于"这一批有几只"；
+* 项目负责人期望：辨别新个体的出现（开放集）；跨时间 Re-ID（个体再识别）不作为当前目标；
+* "新个体"判定依赖"认出旧个体"的能力：特征漂移的已知个体（成长、伤病致疤痕/轮廓改变）是最主要的"疑似新个体"假阳性来源，通过多特征通道互补 + 置信度输出 + 人工核验兜底；
+* 跨时间匹配结果默认落在 possibly_same 关系，个体档案记录照片时间戳与特征变化历史，支持专家核验；
+* 跨时间同体对会随批次积累逐步被发现（匹配 + 人工审核），是"新个体发现"阈值标定的依据；在积累之前，阈值保守、多报候选、人工兜底（宁可拆分不可错并）。
+
+### 2.7 数据使用原则
+
+* **原始数据只读**：所有清洗、裁剪、重命名和整理结果保存在独立目录中，避免破坏原始材料；
+* **分层信任目录标签**：数字子文件夹（Anchor）未经人工核验前不代表个体身份，不可作监督分类标签；分组编号只在同调查内成立；`70-79` 散图仅作检索 Gallery；低于 70 分的区间及 `MO`/`RAY`/`DEREK`/`miscellaneous`/`nn relationship` 等目录暂不用于个体标签；
+* **避免重复数据**：数据索引阶段进行文件哈希或图像相似度检查，避免重复统计和重复训练；
+* **可追溯**：每张处理后的图片都能追溯到原始文件路径、调查日期、拍摄批次、连续拍摄序列、原始候选分组、图像质量区间、处理方式、人工核验状态。
+
+## 3. 环境
 
 - Python 3.13+，依赖见 `requirements.txt`（torch、timm、fastapi、pandas、numpy、hdbscan、ultralytics、PyYAML）
 - 模型权重与原始数据不入库：检测器 `models/detectors/yolov8n_dorsalfin.pt`，r3 特征权重 `outputs/metric_learning/r3/best.pt`，原图 `I:/`
 - 所有入口默认值从 `configs/*.yaml` 读取，可用 CLI 参数覆盖
 
-## 3. 正式入口
+## 4. 正式入口
 
-所有命令在仓库根目录执行。七个正式入口（3.1–3.7），**一个功能一个入口**：
+所有命令在仓库根目录执行。七个正式入口（4.1–4.7），**一个功能一个入口**：
 
-### 3.1 数据盘点 `scripts/prepare_data.py`
+### 4.1 数据盘点 `scripts/prepare_data.py`
 
 扫描原始目录生成数据清单（manifest）：
 
@@ -36,7 +156,7 @@ python scripts/prepare_data.py scan --sha256      # 附加 SHA-256 完全重复�
 python scripts/prepare_data.py build-pilot        # 由 manifest 生成 pilot_set.csv（高分 Anchor 照片表）
 ```
 
-### 3.2 批内归档管线 `scripts/run_pipeline.py`
+### 4.2 批内归档管线 `scripts/run_pipeline.py`
 
 新批次全流程：YOLO 背鳍检测裁剪 → r3 特征 → HDBSCAN 批内候选聚类 → 子簇化 → 簇级多帧投票匹配历史库 → 代表图 + 候选簇拼图（人工审核材料）。
 
@@ -58,7 +178,7 @@ python scripts/run_pipeline.py --input-manifest outputs/index/dataset_manifest.c
 | `--out` | `outputs/cluster_archival` | 输出目录（内部按 batch_name 分目录） |
 | `--sheets` | 关 | 生成候选簇拼图 |
 
-### 3.3 人工审核网页 `scripts/launch_review.py`
+### 4.3 人工审核网页 `scripts/launch_review.py`
 
 审核批内归档候选簇：逐簇确认（confirmed）/ 不确定（uncertain）/ 拒绝（reject），记录审核人与时间，可追溯。
 
@@ -69,7 +189,7 @@ python scripts/launch_review.py --export                 # 导出审核结果（
 
 审核结果在 `outputs/review/`（annotations.csv + confirmed_individuals.csv）。
 
-### 3.4 个体查询客户端 `scripts/launch_query.py`
+### 4.4 个体查询客户端 `scripts/launch_query.py`
 
 上传一张背鳍照片 → YOLO 检测裁剪（未检出回退整图）→ r3 特征 → 全库 Top-K 检索，输出三态判定：
 
@@ -82,7 +202,7 @@ python scripts/launch_query.py                    # http://127.0.0.1:8000
 
 可双击 `start_query_app.bat` 一键启动。默认阈值 0.55（E4 标定 FA≤5% 区间中值）。查询模型必须与 gallery 特征同模型（读取 embedding 旁 config 自动匹配，显式指定时校验拒绝跨模型）。
 
-### 3.5 特征训练 `scripts/train_reid.py`
+### 4.5 特征训练 `scripts/train_reid.py`
 
 用人工确认的伪标签训练特征模型（ArcFace 度量学习两阶段：冻结 backbone 训 head → 解冻微调）：
 
@@ -92,7 +212,7 @@ python scripts/train_reid.py --no-hard-negative       # r1/r2 历史链路（纯
 python scripts/train_reid.py --extract                # 训练后重新提取特征
 ```
 
-### 3.6 评估 `scripts/evaluate.py`
+### 4.6 评估 `scripts/evaluate.py`
 
 在已提取特征上评估检索指标（个体级 R@1 / mAP）或对级相似度分布（FA5% 阈值建议）：
 
@@ -102,7 +222,7 @@ python scripts/evaluate.py --embeddings outputs/embeddings/embeddings_metric_r3_
 python scripts/evaluate.py --mode pairs   # 同/跨个体余弦分布 + 阈值建议
 ```
 
-### 3.7 跨时间批次驱动 `scripts/run_cross_time_batch.py`
+### 4.7 跨时间批次驱动 `scripts/run_cross_time_batch.py`
 
 历史库（20140806 01/03 labeled）→ YOLO 裁剪 + r3 特征 → 逐个新批次跑批内归档管线并匹配历史库（实验 E7 验证的真实流程）：
 
@@ -112,7 +232,7 @@ python scripts/run_cross_time_batch.py --sessions "20140419 02"   # 只跑指定
 python scripts/run_cross_time_batch.py --only-gallery        # 只构建历史库特征
 ```
 
-### 3.8 其他工具
+### 4.8 其他工具
 
 | 入口 | 用途 |
 |---|---|
@@ -120,7 +240,7 @@ python scripts/run_cross_time_batch.py --only-gallery        # 只构建历史�
 | `scripts/train_detector.py` | 训练 YOLO 背鳍检测器（数据由 `scripts/build_yolo_det_dataset.py` + SAM 预标注构建） |
 | `scripts/contact_sheets.py` | 候选簇拼图（已被审核网页取代，备用） |
 
-## 4. 配置
+## 5. 配置
 
 `configs/` 三个 YAML，所有路径相对仓库根；数据盘路径只在 `pipeline.yaml` 出现一次：
 
@@ -130,7 +250,7 @@ python scripts/run_cross_time_batch.py --only-gallery        # 只构建历史�
 | `reid.yaml` | 训练超参（epochs/lr/batch）、hard_negative 开关、HN 挖掘参数 |
 | `detector.yaml` | YOLO 训练超参（epochs/imgsz/device） |
 
-## 5. 目录结构
+## 6. 目录结构
 
 ```text
 WhiteWhale_recognization/
@@ -158,7 +278,6 @@ WhiteWhale_recognization/
 ├── configs/                   # 统一配置：pipeline.yaml / reid.yaml / detector.yaml
 ├── experiments/               # 一次性科研实验（benchmark/评估预演；可追溯，不参与正式流程）
 ├── tests/                     # pytest 接口测试（31 个，见 §7）
-├── docs/                      # 深挖资料（见下方"文档导航"）
 ├── outputs/                   # 生成物（不入库，可重新生成）
 │   ├── embeddings/            #   特征库（*.npy + meta.csv + config.json）
 │   ├── cluster_archival/      #   归档管线产物（每批次一个子目录：clusters/ 代表图/ 拼图）
@@ -170,15 +289,7 @@ WhiteWhale_recognization/
 └── I:/                        # 原始数据（只读，不入库，configs/pipeline.yaml 中配置）
 ```
 
-### 文档导航（读一次 README 之后，按需深挖）
-
-| 文档 | 内容 | 何时看 |
-|---|---|---|
-| `docs/DATASET.md` | 数据结构、规模、已确认事实、假设 A1–A13、数据使用规则 | 需要理解数据语义时 |
-| `EXPERIMENT_LOG.md` | E1–E9 实验记录（配置/结果/结论），只追加不修改 | 查历史实验结论时 |
-| `scripts/README.md` | scripts/ 快速导航（本文档 §3 的精简版） | 找脚本时 |
-
-## 6. 测试
+## 7. 测试
 
 ```bash
 python -m pytest tests/ -v
@@ -186,7 +297,7 @@ python -m pytest tests/ -v
 
 覆盖：检索指标（R@k/mAP）、query/gallery 划分防泄漏、拼图输出、审核数据可追溯、查询三态判定与模型匹配防护、yaml 配置加载。
 
-## 7. 待办（当前）
+## 8. 待办（当前）
 
 > 只列待办；已完成任务的记录在 `EXPERIMENT_LOG.md` 与本文档。状态：`[ ]` 待办 / `[~]` 进行中。
 
@@ -239,7 +350,7 @@ python -m pytest tests/ -v
 | D.2 | 参考仓库 SOURCE_MAP：CetaMatch(MIT)、MiewID(无LICENSE)、DINOv2(Apache-2.0)、WildlifeDatasets/WildlifeTools、Happywhale-1st、Faiss、PyTorch Metric Learning；公开数据集：Happywhale(Kaggle)、NDD20、NOAA Choctawhatchee、BelugaID（beluga 已接入 experiments/pub_reid/） | [~] |
 | D.3 | 数据伦理与合规（不公开敏感地点/坐标/未经授权影像） | [ ] |
 
-## 8. 科研边界
+## 9. 科研边界
 
 - 一次性实验脚本在 `experiments/`，正式功能一律走 `src/whitewhale/` + 上述入口；
 - 实验结果只追加记录于 `EXPERIMENT_LOG.md`（配置、结果、结论），删除脚本不删除实验记录；
