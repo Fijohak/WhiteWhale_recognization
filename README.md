@@ -176,8 +176,6 @@ WhiteWhale_recognization/
 |---|---|---|
 | `docs/DATASET.md` | 数据结构、规模、已确认事实、假设 A1–A13、数据使用规则 | 需要理解数据语义时 |
 | `EXPERIMENT_LOG.md` | E1–E9 实验记录（配置/结果/结论），只追加不修改 | 查历史实验结论时 |
-| `docs/anchor_pool_semantics.md` | Anchor/Pool 语义专项说明（方向调整背景） | 回顾项目方向时 |
-| `docs/cetacean_reid_transfer_learning_plan.md` | 跨物种迁移学习科研计划 | 科研设计时 |
 | `scripts/README.md` | scripts/ 快速导航（本文档 §3 的精简版） | 找脚本时 |
 
 ## 6. 测试
@@ -238,7 +236,7 @@ python -m pytest tests/ -v
 
 | # | 任务 | 状态 |
 |---|---|---|
-| D.2 | 参考仓库 SOURCE_MAP（CetaMatch(MIT)/MiewID(无LICENSE)/DINOv2(Apache-2.0) 等） | [~] |
+| D.2 | 参考仓库 SOURCE_MAP：CetaMatch(MIT)、MiewID(无LICENSE)、DINOv2(Apache-2.0)、WildlifeDatasets/WildlifeTools、Happywhale-1st、Faiss、PyTorch Metric Learning；公开数据集：Happywhale(Kaggle)、NDD20、NOAA Choctawhatchee、BelugaID（beluga 已接入 experiments/pub_reid/） | [~] |
 | D.3 | 数据伦理与合规（不公开敏感地点/坐标/未经授权影像） | [ ] |
 
 ## 8. 科研边界
