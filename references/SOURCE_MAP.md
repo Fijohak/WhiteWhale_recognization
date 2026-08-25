@@ -1,7 +1,7 @@
 # SOURCE_MAP：外部参考与数据源记录
 
 > 记录所有外部仓库、数据源、镜像的引用方式与来源，保证可追溯。
-> 更新日期：2026-08-11
+> 更新日期：2026-08-25
 
 ---
 
@@ -30,10 +30,10 @@
 
 | 数据集 | 官方地址 | License | 本地路径 | 状态 |
 |---|---|---|---|---|
-| Happywhale | https://www.kaggle.com/competitions/happy-whale-and-dolphin | Kaggle 竞赛条款（不可再分发） | `D:\dolphin_data\happywhale\` | ✅ 分片0 已下（1.96GB parquet，2247 图） |
+| Happywhale | https://www.kaggle.com/competitions/happy-whale-and-dolphin | Kaggle 竞赛条款（不可再分发） | `D:\dolphin_data\happywhale\` | ✅ 分片0 已下（1.96GB parquet，2247 图）；adapter 已接入 `experiments/pub_reid/dataset/happywhale.py` |
 | NDD20 | https://doi.org/10.25405/data.ncl.c.4982342 | CC BY-NC-SA 4.0 | 未下载 | data.ncl.ac.uk JS 渲染，待解析 |
 | NOAA Choctawhatchee | https://www.fisheries.noaa.gov/inport/item/26481 | NOAA 条款 | 未下载 | 302 重定向待解析 |
-| BelugaID 2022 | https://lila.science/datasets/beluga-id-2022/ | LILA 条款（需逐项确认） | `D:\dolphin_data\beluga\` | ✅ test.zip 已下；coco.tar.gz 下载中 |
+| BelugaID 2022 | https://lila.science/datasets/beluga-id-2022/ | LILA 条款（需逐项确认） | `D:\dolphin_data\beluga\` | ✅ test.zip + coco.tar.gz 已下（3402 图/978 身份/10 scenario）；adapter 已接入 `experiments/pub_reid/dataset/beluga.py` |
 
 ---
 
@@ -54,6 +54,8 @@
 - 测试集：`wild-me/beluga-id-test.zip`（122MB，3401 图 + private_test_labels.csv + private_train_metadata.csv）
   - ⚠️ zip 内只有 **test 图片**（无 train 图）；`private_test_metadata.csv` 无 whale_id
 - 完整标注：`wild-me/beluga.coco.tar.gz`（590MB，COCO 格式，含 whale_id / encounter_id / viewpoint / date）
+  - ✅ 已下载完（2026-08-25）；adapter 按官方 Re-ID benchmark 语义接入
+  - ⚠️ original_whale_id 是竞赛未公开身份，只用于内部研究评估，不可再分发
 - 官方入口：https://lila.science/datasets/beluga-id-2022/
 - 备选镜像：storage.googleapis.com / s3 us-west-2
 

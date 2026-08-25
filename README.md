@@ -227,6 +227,15 @@ python scripts/run_cross_time_batch.py --only-gallery        # 只构建历史�
 | `scripts/train_detector.py` | 训练 YOLO 背鳍检测器（数据由 `scripts/build_yolo_det_dataset.py` + SAM 预标注构建） |
 | `scripts/contact_sheets.py` | 候选簇拼图（已被审核网页取代，备用） |
 
+### 4.9 数据管理工具（3.2/3.3/3.6/1.9 支撑）
+
+| 入口 | 用途 |
+|---|---|
+| `scripts/finalize_history_verify.py` | 历史库核验回填：汇总表 → 可信基准 `history_verified_individuals.csv` + pilot_set 置 verified（改前备份；结论=通过且组内无不确定/排除才登记，组名不在 pilot_set 拒绝执行）。见 [docs/history_verify_crossyear.md](docs/history_verify_crossyear.md) §一 1.5 |
+| `scripts/group_sequences.py` | 散图连拍串分组：按文件名连拍号分串（322 张散图 → 78 串）+ A9 抽样核验清单；核验通过前不用于划归 |
+| `scripts/build_eval_set.py` | 人工评估集划分草案：确认个体 → 按 Sequence 划分 query/gallery（同序列不拆分防泄漏）；草案须人工确认 |
+| `scripts/export_relations.py` | 确认关系表导出：confirmed_same 对 + confirmed_different / possibly_same 空表结构（数据源待 3.8） |
+
 ## 5. 配置
 
 `configs/` 三个 YAML，所有路径相对仓库根；数据盘路径只在 `pipeline.yaml` 出现一次：
@@ -250,6 +259,10 @@ WhiteWhale_recognization/
 │   ├── train_reid.py          #   5. 特征训练（r3 正式链路）
 │   ├── evaluate.py            #   6. 检索指标 / 对级分布评估
 │   ├── run_cross_time_batch.py#   7. 跨时间批次驱动
+│   ├── finalize_history_verify.py#  8. 历史库核验回填（3.6 步骤4 自动化）
+│   ├── group_sequences.py       #    9. 散图连拍串分组（1.9 准备）
+│   ├── build_eval_set.py        #   10. 评估集划分草案（3.2）
+│   ├── export_relations.py      #   11. 确认关系表导出（3.3）
 │   ├── assign_pool.py         #   同群散图划分（辅助工具）
 │   ├── train_detector.py      #   YOLO 背鳍检测器训练（辅助工具）
 │   ├── build_yolo_det_dataset.py、annotate_sam.py   # 检测数据构建（辅助工具）
@@ -259,12 +272,15 @@ WhiteWhale_recognization/
 │   ├── detection/             #   YOLO 检测 + 非均匀扩展裁剪（detector.py）
 │   ├── reid/                  #   embedding（模型族+统一提取）/ training / evaluation / retrieval
 │   ├── review/                #   审核网页 app + 拼图 contact_sheets
-│   ├── data/                  #   manifest（扫描+清单）/ dataset（审核数据集）
+│   ├── data/                  #   manifest（扫描+清单）/ dataset（审核数据集）/
+│   │                          #   数据工具（评估集划分 eval_set / 分串 sequence_groups /
+│   │                          #   关系表 relations / 核验回填 history_verify）
 │   ├── query.py               #   查询客户端应用
 │   └── config.py              #   yaml 统一加载（load_config）
 ├── configs/                   # 统一配置：pipeline.yaml / reid.yaml / detector.yaml
+├── docs/                      # 操作手册（历史库核验与跨年匹配重建）
 ├── experiments/               # 一次性科研实验（benchmark/评估预演；可追溯，不参与正式流程）
-├── tests/                     # pytest 接口测试（31 个，见 §7）
+├── tests/                     # pytest 接口测试（43 个，见 §7）
 ├── outputs/                   # 生成物（不入库，可重新生成）
 │   ├── embeddings/            #   特征库（*.npy + meta.csv + config.json）
 │   ├── cluster_archival/      #   归档管线产物（每批次一个子目录：clusters/ 代表图/ 拼图）
@@ -282,7 +298,7 @@ WhiteWhale_recognization/
 python -m pytest tests/ -v
 ```
 
-覆盖：检索指标（R@k/mAP）、query/gallery 划分防泄漏、拼图输出、审核数据可追溯、查询三态判定与模型匹配防护、yaml 配置加载。
+覆盖：检索指标（R@k/mAP）、query/gallery 划分防泄漏、拼图输出、审核数据可追溯、查询三态判定与模型匹配防护、yaml 配置加载、数据工具（3.6 回填/1.9 分串/3.2 划分/3.3 关系表）。
 
 ## 8. 待办（当前）
 
@@ -293,7 +309,7 @@ python -m pytest tests/ -v
 | # | 任务 | 状态 |
 |---|---|---|
 | 0.8 | 确认数据授权（是否允许训练、发布模型或公开派生数据） | [ ] 需数据提供方 |
-| 1.9 | 散图连拍整串划归：散图池按拍摄序列分组，任一帧匹配上某个体则整串划归候选（A9 抽样核验后执行；一次确认一串，大幅提升收集效率；分组脚本可由 Claude 先行准备） | [ ] |
+| 1.9 | 散图连拍整串划归：散图池按拍摄序列分组，任一帧匹配上某个体则整串划归候选（A9 抽样核验后执行；一次确认一串，大幅提升收集效率）——**分组脚本已就绪 `scripts/group_sequences.py`**（真实数据 322 张散图 → 78 串，含 A9 抽样核验清单 `outputs/index/sequence_sample_checklist.csv`），A9 核验通过即可使用 | [ ] |
 | 1.8 | 散图分拣（人工待办）：322 张散图（loose_known，9 批次）人工分配到对应个体文件夹 | [ ] 组员 |
 
 **人工基准集**
@@ -301,13 +317,13 @@ python -m pytest tests/ -v
 | # | 任务 | 状态 |
 |---|---|---|
 | 3.1 | 人工核验候选簇：初审已完成（首批 135 张/31 个体 + 跨时间 7 批次 270 张全过审：65 组确认 / 68 不确定 / 7 排除）；正式核验待做（多人复核投票，见 3.7） | [~] |
-| 3.2 | 建立人工评估集（多个体 × 多日期 × 多角度，按 Sequence 划分）：自动划分脚本可先出草案，人工确认 | [ ] |
-| 3.3 | 建立确认关系表（confirmed_same / confirmed_different / possibly_same）：表结构与导出代码可先搭 | [ ] |
+| 3.2 | 建立人工评估集（多个体 × 多日期 × 多角度，按 Sequence 划分）——**自动划分脚本已就绪 `scripts/build_eval_set.py`**（真实数据草案：123 张 / 28 个体，query 28 / gallery 95，同序列不拆分），草案待人工确认 | [ ] |
+| 3.3 | 建立确认关系表（confirmed_same / confirmed_different / possibly_same）——**表结构与导出代码已就绪 `scripts/export_relations.py`**（confirmed_same 有数据，另两张空表结构 + 数据源说明） | [ ] |
 | 3.4 | 确定可接受错误合并率（优先控制错误合并风险，种群统计低估） | [ ] 科研决策 |
 | 3.5 | Pilot 人工确认集（~20-30 个 Anchor 的同个体照片 2-4 张） | [ ] |
-| 3.6 | 历史库核验：20140806 43 组 202 张 Candidate 级标签人工核验（包已就绪：batches_history/history_verify.csv，202/202 带特征辅助） | [ ] 组员执行 |
-| 3.7 | 6 张撤回照片多人复核投票重审（E9 撤回；关键判定须多人独立标注 + 投票裁决） | [ ] 组员执行（依赖 6.11 工具） |
-| 3.8 | 跨年匹配重建（依赖 3.6 + 3.7 通过后；重建脚本/流程可先行准备） | [ ] |
+| 3.6 | 历史库核验：20140806 43 组 202 张 Candidate 级标签人工核验（包已就绪：batches_history/history_verify.csv，202/202 带特征辅助）——**操作手册见 [docs/history_verify_crossyear.md](docs/history_verify_crossyear.md) §一**；**核验回填脚本已就绪 `scripts/finalize_history_verify.py`**（汇总表 → 可信基准 + pilot_set 置 verified，含自洽校验与组名防错） | [ ] 组员执行 |
+| 3.7 | 6 张撤回照片多人复核投票重审（E9 撤回；关键判定须多人独立标注 + 投票裁决）——**操作手册见 [docs/history_verify_crossyear.md](docs/history_verify_crossyear.md) §二**（6 张照片清单与流程已写明） | [ ] 组员执行（依赖 6.11 工具） |
+| 3.8 | 跨年匹配重建（依赖 3.6 + 3.7 通过后）——**操作手册见 [docs/history_verify_crossyear.md](docs/history_verify_crossyear.md) §三**（前置条件/命令/审核/成功标准已写明） | [ ] |
 
 **自监督与轮廓特征**
 
@@ -315,7 +331,7 @@ python -m pytest tests/ -v
 |---|---|---|
 | 4.1 | 自监督微调（DINOv2 / SimCLR / MoCo / BYOL / MAE 之一） | [ ] |
 | 4.2 | 增强策略设计——**镜像鲁棒性实测完成（E11）**：水平翻转对 r3 特征影响小（同体相似度 −0.030，翻转 query 检索 R@1 −0.038），**翻转增强基本安全**，可纳入训练（小概率）；正式训练增强配置待定 | [~] |
-| 4.3 | 背鳍轮廓特征（CurvRank 风格）——**原型实验完成（E10）**：A14 几何对称性成立（同一轮廓镜像后特征不变，对称化 1.000）；但 Otsu 分割不稳定使特征区分度不足（同体≈跨体，R@1 0.087 vs 外观 0.728），**分割质量是瓶颈**，改善后再评估 | [~] |
+| 4.3 | 背鳍轮廓特征（CurvRank 风格）——**原型实验完成（E10）**：A14 几何对称性成立（同一轮廓镜像后特征不变，对称化 1.000）；但 Otsu 分割不稳定使特征区分度不足（同体≈跨体，R@1 0.087 vs 外观 0.728）；**自由边比例扫描（0.45/0.55/0.65）确认瓶颈在分割本身而非轮廓范围**（R@1 不升反降），改善分割需更强方法（SAM 等，需标注辅助） | [~] |
 | 4.4 | 特征对比——轮廓 vs 外观已测（E10：轮廓 R@1 0.087 vs 外观 0.728）；融合待做（依赖分割改善） | [ ] |
 | 4.5 | 特征可视化与错误分析——E10 完成基础版（外观 R@1 失败 50/184，分散 19 个个体，无集中病灶）；可视化报告待完善 | [~] |
 
@@ -339,8 +355,8 @@ python -m pytest tests/ -v
 
 | # | 任务 | 状态 |
 |---|---|---|
-| D.2 | 参考仓库 SOURCE_MAP：CetaMatch(MIT)、MiewID(无LICENSE)、DINOv2(Apache-2.0)、WildlifeDatasets/WildlifeTools、Happywhale-1st、Faiss、PyTorch Metric Learning；公开数据集：Happywhale(Kaggle)、NDD20、NOAA Choctawhatchee、BelugaID（beluga 已接入 experiments/pub_reid/） | [~] |
-| D.3 | 数据伦理与合规（不公开敏感地点/坐标/未经授权影像） | [ ] |
+| D.2 | 参考仓库 SOURCE_MAP（[references/SOURCE_MAP.md](references/SOURCE_MAP.md)）：CetaMatch(MIT)、MiewID(无LICENSE)、DINOv2(Apache-2.0)、WildlifeDatasets/WildlifeTools、Happywhale-1st、Faiss、PyTorch Metric Learning；公开数据集：Happywhale(Kaggle)、NDD20、NOAA Choctawhatchee、BelugaID——**beluga + happywhale 已接入 `experiments/pub_reid/`，SOURCE_MAP 已同步（2026-08-25）** | [~] |
+| D.3 | 数据伦理与合规（不公开敏感地点/坐标/未经授权影像）——**已检查（2026-08-25）**：代码无密钥/token/.env；git 历史无敏感文件；文档无真实坐标（仅数据内部地点代码 SZi/HBi，已声明）；生成物与原始数据均不入库 | [~] |
 
 ## 9. 科研边界
 

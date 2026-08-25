@@ -10,7 +10,7 @@ venv/
 
 # 大文件：模型权重、原始数据目录
 models/
-data/
+/data/                 # 仓库根 data/（原始数据目录）；注意锚定，勿误伤 src/whitewhale/data/
 *.pt
 *.pth
 *.onnx
