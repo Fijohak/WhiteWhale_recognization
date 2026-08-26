@@ -241,6 +241,8 @@ def collect_band_group_ids(root: Path) -> dict[str, dict[str, list[str]]]:
 
 def scan_dataset(data_roots: list[Path], output_dir: Path, include_sha256: bool) -> None:
     """扫描所有数据根目录，汇总生成 Manifest 与统计信息。"""
+    # yaml 解析出的 data_roots 为 str，统一包装为 Path（兼容 str / Path 混合传入）
+    data_roots = [Path(r) for r in data_roots]
     for root in data_roots:
         if not root.exists():
             raise FileNotFoundError(f"数据目录不存在：{root}")

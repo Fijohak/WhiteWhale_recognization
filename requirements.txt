@@ -3,12 +3,18 @@ numpy
 pandas
 pillow
 torch
-timm
+torchvision            # 预处理 transforms（embedding.py / training.py 正式依赖）
+timm                   # MegaDescriptor / DINOv2 backbone（embedding.py 正式依赖）
+ultralytics            # YOLO 背鳍检测（detector.py / query.py 正式依赖）
+pyyaml                 # configs/*.yaml 加载（config.py 正式依赖）
 fastapi
 uvicorn
 python-multipart
-hdbscan            # HDBSCAN 候选聚类（run_pipeline 正式依赖）
+hdbscan                # HDBSCAN 候选聚类（run_pipeline 正式依赖）
 
 # 可选（按需安装）
-# faiss-cpu        # Faiss Top-K 加速
-# pytest           # 测试（tests/）
+# faiss-cpu            # Faiss Top-K 加速
+# pytest               # 测试（tests/）
+# opencv-python        # experiments/contour_features 轮廓特征实验
+# scipy                # experiments/contour_features cKDTree 空间检索
+# matplotlib           # experiments/eval_openset_preview 分布图绘制

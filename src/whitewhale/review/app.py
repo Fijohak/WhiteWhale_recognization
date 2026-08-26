@@ -15,6 +15,7 @@ CLI 入口见 scripts/launch_review.py。
 """
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import numpy as np
