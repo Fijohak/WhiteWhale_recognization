@@ -24,10 +24,10 @@
 | 核验清单 | `outputs/review_package/batches_history/history_verify.csv` | 202 行 = 202 张待核验照片，按组排列 |
 | 批次特征 | `outputs/review_package/batches_emb/history_verify.npy` | 簇内相似度辅助（混入者自动沉底标红） |
 | 历史照片目录 | `outputs/review_package/history_lookup/` | 43 组，按个体分目录（`20140806 01_1.0` 等） |
-| 原图 | `I:/20140806 01`、`I:/20140806 03` | 审核时看原图背鳍细节 |
+| 原图 | `src_dataset/20140806 01`、`src_dataset/20140806 03` | 审核时看原图背鳍细节 |
 | 质量表 | `outputs/review_package/history_quality.csv` | 模糊/未检出背鳍的对照图标记（核验时低质图会变灰，可取消隐藏） |
 
-> 若给别人核验：把 `review_package/` 整个目录 + `I:/` 下两个批次目录拷到对方电脑（U 盘/局域网，**不走外网网盘**——照片含拍摄时间地点信息）。对方电脑上两者放同一层，例如 `D:\whale\20140806 01` + `D:\whale\review_package`。
+> 若给别人核验：把 `review_package/` 整个目录 + `src_dataset/` 下两个批次目录拷到对方电脑（U 盘/局域网，**不走外网网盘**——照片含拍摄时间地点信息）。对方电脑上两者放同一层，例如 `D:\whale\20140806 01` + `D:\whale\review_package`。
 
 ### 1.2 环境（一次性）
 
@@ -149,7 +149,7 @@ python scripts/run_cross_time_batch.py
 | 问题 | 处理 |
 |---|---|
 | 审核网页打不开 | 检查端口被占用（换 `--port`）；检查 `--images-root` 路径层级（批次目录要在其下） |
-| 照片加载不出来 | 原图在 `I:/` 被移动/只读权限 → 确认路径存在；历史对照图在 `history_lookup/` |
+| 照片加载不出来 | 原图在 `src_dataset/` 被移动/只读权限 → 确认路径存在；历史对照图在 `history_lookup/` |
 | 组里混入者标红但看起来像同体 | 以原图背鳍细节为准，红框只是相似度提示不是结论 |
 | 核验中途退出 | 标注已即时写入 CSV，重新启动同一 `--annotations` 路径继续 |
 | 不确定太多 | 正常。宁可多留待定，不要为了"完成"硬确认 |

@@ -37,7 +37,7 @@ def main():
     parser.add_argument("--pilot", type=Path,
                         default=base / query_cfg.get("pilot", "pilot/pilot_set.csv"))
     parser.add_argument("--images-root", type=Path,
-                        default=Path(cfg.get("data_root", "I:/")),
+                        default=Path(cfg.get("data_root", "src_dataset")),
                         help="图片根目录（含 01/ 03/ 子目录）")
     parser.add_argument("--model", type=str, default=None,
                         help="查询模型覆盖（默认自动匹配 gallery 特征模型）："

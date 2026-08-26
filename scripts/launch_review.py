@@ -34,7 +34,7 @@ def main():
                         default=base / "review" / "review_annotations.csv",
                         help="审核标注保存位置（每次操作即时写入）")
     parser.add_argument("--images-root", type=Path,
-                        default=Path(cfg.get("data_root", "I:/")),
+                        default=Path(cfg.get("data_root", "src_dataset")),
                         help="图片根目录（含 01/ 03/ 子目录）")
     parser.add_argument("--embeddings", type=Path,
                         default=base / "embeddings" / "embeddings.npy",

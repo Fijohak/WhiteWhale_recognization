@@ -31,7 +31,7 @@ def main():
     parser.add_argument("--pilot", type=Path, default=base / "pilot" / "pilot_set.csv",
                         help="人工初审清单（含 confirmed_identity，Candidate 级标签）")
     parser.add_argument("--images-root", type=Path,
-                        default=Path(load_config("pipeline").get("data_root", "I:/")),
+                        default=Path(load_config("pipeline").get("data_root", "src_dataset")),
                         help="图片根目录（只读）")
     parser.add_argument("--out", type=Path, default=base / "metric_learning" / "r3",
                         help="输出目录（best.pt / history.csv / metrics.json）")

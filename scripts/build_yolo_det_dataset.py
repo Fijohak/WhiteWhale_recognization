@@ -39,7 +39,7 @@ def main():
     parser.add_argument("--exclude", type=Path,
                         default=base / "outputs" / "det_labels" / "exclude.txt")
     parser.add_argument("--pilot", type=Path, default=base / "outputs" / "pilot" / "pilot_set.csv")
-    parser.add_argument("--images-root", type=Path, default=Path("I:/"), help="原始图片根目录（只读）")
+    parser.add_argument("--images-root", type=Path, default=Path("src_dataset"), help="原始图片根目录（只读）")
     parser.add_argument("--out", type=Path, default=base / "datasets" / "dorsal_fin")
     parser.add_argument("--val-sessions", default=None,
                         help="指定验证 session 列表（逗号分隔，如 '3'）；默认按 sequence 洗牌 20%")

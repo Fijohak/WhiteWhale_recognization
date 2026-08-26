@@ -18,20 +18,20 @@
 | 批内（同一天） | 封闭集归档：检测 → 聚类 → 每簇选代表图 → 人工审核归档 |
 | 跨时间（不同批次） | 开放集匹配：新批次与历史个体库匹配，低于阈值标记"疑似新个体"；结果仅作候选 |
 | 左右侧分离 | 背鳍两侧特征不同，照片记录朝向（left/right/unknown），左右侧分别比较 |
-| 原始数据只读 | 原图在 `I:/` 只读；所有生成物写 `outputs/`，可追溯到原始路径 |
+| 原始数据只读 | 原图在 `src_dataset/` 只读；所有生成物写 `outputs/`，可追溯到原始路径 |
 
 数据集结构、规模、已确认事实与待确认假设见 [§2 数据](#2-数据)。历史实验结果与结论见 [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md)。
 
 ## 2. 数据
 
-原始数据（原图）不入库，位于 `I:/`。本节是数据理解的参考手册：结构、规模、已确认事实与待确认假设；日常跑系统不需要逐条核对。
+原始数据（原图）不入库，位于 `src_dataset/`。本节是数据理解的参考手册：结构、规模、已确认事实与待确认假设；日常跑系统不需要逐条核对。
 
 ### 2.1 目录结构与命名规范
 
 > **命名规范**：数据根目录名 = `YYYYMMDD NN`（年月日 + 空格 + 群体编号，编号仅当日唯一），session 标识 = 完整目录名。当前共 **9 个批次**：20140806 01/03（历史库）、20140418 01、20140419 02/04/05/06、20151017 02/03。结构精简：仅 `70-79` / `80 and above`（部分批次含 `nn relationship`，非必有；数据提供方要求忽略低分数据）。
 
 ```text
-I:\20140806 01（示例批次，历史库；调查 20140417W01，地点代码 SZi，批次 01）
+src_dataset/20140806 01（示例批次，历史库；调查 20140417W01，地点代码 SZi，批次 01）
 ├── 70-79/                      # 70-79 分组
 │   ├── 05/ 11/ 12/ 13/ 14/ …   # 数字子文件夹 = 代表照片 Anchor（组名非全局 ID）
 │   └── *.JPG                   # 散图，Unresolved Image Pool（人工跟进中）
@@ -126,7 +126,7 @@ I:\20140806 01（示例批次，历史库；调查 20140417W01，地点代码 SZ
 ## 3. 环境
 
 - Python 3.13+，依赖见 `requirements.txt`（torch、timm、fastapi、pandas、numpy、hdbscan、ultralytics、PyYAML）
-- 模型权重与原始数据不入库：检测器 `models/detectors/yolov8n_dorsalfin.pt`，r3 特征权重 `outputs/metric_learning/r3/best.pt`，原图 `I:/`
+- 模型权重与原始数据不入库：检测器 `models/detectors/yolov8n_dorsalfin.pt`，r3 特征权重 `outputs/metric_learning/r3/best.pt`，原图 `src_dataset/`
 - 所有入口默认值从 `configs/*.yaml` 读取，可用 CLI 参数覆盖
 
 ## 4. 正式入口
@@ -289,7 +289,7 @@ WhiteWhale_recognization/
 │   └── index/ pilot/          #   manifest、pilot 清单
 ├── models/                    # 模型权重（不入库）：detectors/（YOLO）
 ├── start_query_app.bat        # 双击一键启动查询客户端
-└── I:/                        # 原始数据（只读，不入库，configs/pipeline.yaml 中配置）
+└── src_dataset/                # 原始数据（只读，不入库，configs/pipeline.yaml 中配置）
 ```
 
 ## 7. 测试

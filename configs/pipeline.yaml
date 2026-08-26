@@ -1,17 +1,17 @@
 # 管线统一配置（run_pipeline / launch_review / launch_query / prepare_data / run_cross_time_batch 共用）
-# 所有路径相对仓库根；I:/ 等数据盘只在这里出现一次。
+# 所有路径相对仓库根；数据盘路径只在这里出现一次。
 
-data_root: I:/                                # 原图根目录（只读，含 9 个批次目录）
+data_root: src_dataset/                       # 原图根目录（只读，含 9 个批次目录）
 data_roots:                                   # prepare_data scan 的扫描根（9 个批次，YYYYMMDD NN 命名）
-  - I:/20140806 01
-  - I:/20140806 03
-  - I:/20140418 01
-  - I:/20140419 02
-  - I:/20140419 04
-  - I:/20140419 05
-  - I:/20140419 06
-  - I:/20151017 02
-  - I:/20151017 03
+  - src_dataset/20140806 01
+  - src_dataset/20140806 03
+  - src_dataset/20140418 01
+  - src_dataset/20140419 02
+  - src_dataset/20140419 04
+  - src_dataset/20140419 05
+  - src_dataset/20140419 06
+  - src_dataset/20151017 02
+  - src_dataset/20151017 03
 output_root: outputs
 detector_checkpoint: models/detectors/yolov8n_dorsalfin.pt   # YOLO 背鳍检测器（E1）
 reid_checkpoint: outputs/metric_learning/r3/best.pt          # r3 跨群 HN 微调权重（正式特征源）

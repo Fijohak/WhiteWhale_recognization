@@ -78,7 +78,7 @@ def run():
     parser.add_argument("--pilot", type=Path, default=base / "outputs" / "pilot" / "pilot_set.csv")
     parser.add_argument("--center-crops", type=Path, default=base / "outputs" / "crops_center_pool")
     parser.add_argument("--yolo-crops", type=Path, default=base / "outputs" / "crops_yolo_pool")
-    parser.add_argument("--images-root", type=Path, default=Path("I:/"))
+    parser.add_argument("--images-root", type=Path, default=Path("src_dataset"))
     parser.add_argument("--feat-dir", type=Path, default=base / "outputs" / "embeddings_pool_archival")
     parser.add_argument("--out", type=Path, default=base / "outputs" / "reports" / "pool_archival")
     parser.add_argument("--model", default="hf-hub:BVRA/MegaDescriptor-T-224")

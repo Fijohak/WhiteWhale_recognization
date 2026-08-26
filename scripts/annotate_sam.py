@@ -94,7 +94,7 @@ def main():
     base = Path(__file__).resolve().parents[1] / "outputs"
     parser = argparse.ArgumentParser(description="SAM 辅助背鳍框预标注")
     parser.add_argument("--pilot", type=Path, default=base / "pilot" / "pilot_set.csv")
-    parser.add_argument("--images-root", type=Path, default=Path("I:/"), help="原始图片根目录（只读）")
+    parser.add_argument("--images-root", type=Path, default=Path("src_dataset"), help="原始图片根目录（只读）")
     parser.add_argument("--checkpoint", type=Path,
                         default=Path(__file__).resolve().parents[1] / "models" / "detectors" / "sam_vit_b_01ec64.pth")
     parser.add_argument("--out", type=Path, default=base / "det_labels")

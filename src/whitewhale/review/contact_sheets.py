@@ -6,7 +6,7 @@
 - build_cluster_contact_sheets：按 HDBSCAN 候选簇（Candidate Cluster）分组
   输出，供人工审核逐簇核对（-1 噪声单独一张，仅提醒不强制分配）。
 
-真实运行需要图片根（I:/）；mock 模式生成占位色块验证布局逻辑。
+真实运行需要图片根（src_dataset）；mock 模式生成占位色块验证布局逻辑。
 """
 from __future__ import annotations
 

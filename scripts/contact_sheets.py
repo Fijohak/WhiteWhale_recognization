@@ -5,7 +5,7 @@
     python scripts/contact_sheets.py                       # 默认 Anchor 组
     python scripts/contact_sheets.py --cluster            # 按 HDBSCAN 候选簇分组
 
-真实运行需要图片根（I:/）；--mock 生成占位色块验证布局逻辑。
+真实运行需要图片根（src_dataset）；--mock 生成占位色块验证布局逻辑。
 """
 import argparse
 import sys
@@ -25,7 +25,7 @@ def main():
                         help="Anchor 组清单（默认模式）")
     parser.add_argument("--clusters", type=Path, default=base / "clusters" / "clusters.csv",
                         help="候选簇照片表（--cluster 模式）")
-    parser.add_argument("--images-root", type=Path, default=Path("I:/"),
+    parser.add_argument("--images-root", type=Path, default=Path("src_dataset"),
                         help="图片根目录（含 01/ 03/ 子目录）")
     parser.add_argument("--cluster", action="store_true",
                         help="按 HDBSCAN 候选簇分组（默认按 Anchor 组）")

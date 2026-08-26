@@ -50,7 +50,7 @@ def build_gallery() -> None:
     print(f"[gallery] 历史库 {len(gal)} 张（{gal['session_id'].value_counts().to_dict()}）")
 
     crops_dir = BASE / "outputs" / "crops_yolo_gallery"
-    man = detect_and_crop(gal, Path("I:/"), crops_dir, DET_WEIGHTS,
+    man = detect_and_crop(gal, Path("src_dataset"), crops_dir, DET_WEIGHTS,
                           preview=False)
     model = make_embedder("metric-learning", metric_ckpt=CKPT)
     extract_embeddings(
@@ -88,7 +88,7 @@ def build_query_manifest(session: str, m: pd.DataFrame) -> Path:
 def run_batch(session: str, m: pd.DataFrame) -> None:
     man = build_query_manifest(session, m)
     args = argparse.Namespace(
-        pool=False, input_manifest=man, images_root=Path("I:/"), ckpt=CKPT,
+        pool=False, input_manifest=man, images_root=Path("src_dataset"), ckpt=CKPT,
         gallery_embeddings=GAL_NPY, gallery_meta=GAL_META,
         min_cluster_size=3, subcluster_min_size=4, topk=3,
         threshold_cluster=0.58, threshold_image=0.50,
