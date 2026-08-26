@@ -125,8 +125,9 @@ src_dataset/20140806 01（示例批次，历史库；调查 20140417W01，地点
 
 ## 3. 环境
 
-- Python 3.13+，依赖见 `requirements.txt`（torch、timm、fastapi、pandas、numpy、hdbscan、ultralytics、PyYAML）
-- 模型权重与原始数据不入库：检测器 `models/detectors/yolov8n_dorsalfin.pt`，r3 特征权重 `outputs/metric_learning/r3/best.pt`，原图 `src_dataset/`
+- Python 3.13+，依赖见 `requirements.txt`（torch、timm、fastapi、pandas、numpy、hdbscan、ultralytics、PyYAML）——**新环境先执行 `pip install -r requirements.txt`（网络慢可加清华镜像 `-i https://pypi.tuna.tsinghua.edu.cn/simple`）；运行报 `ModuleNotFoundError` 时请先检查是否已按此安装依赖，再排查其他问题**
+- 模型权重与原始数据不入库（`models/`、`*.pt`、`outputs/*` 已被 git 忽略，**请勿直接 commit 权重文件**）：检测器 `models/detectors/yolov8n_dorsalfin.pt`，r3 特征权重 `outputs/metric_learning/r3/best.pt`，原图 `src_dataset/`
+- **权重获取方式**：自训练权重（检测器 + r3/r4 + 训练记录）打包为 `whitewhale_weights_2026-08-26.zip`（约 200MB，含包内说明 `README.md`）——从网盘分享或项目 Releases 附件下载，**解压到仓库根目录即可**（路径与 `configs/pipeline.yaml` 自动对齐，无需改配置）；MegaDescriptor-T-224 特征模型首次运行自动下载，无需手动获取；ultralytics 官方预训练等仅重训检测器时才需要
 - 所有入口默认值从 `configs/*.yaml` 读取，可用 CLI 参数覆盖
 
 ## 4. 正式入口
@@ -340,7 +341,7 @@ python -m pytest tests/ -v
 | # | 任务 | 状态 |
 |---|---|---|
 | 5.1 | 生成伪标签（仅高可信确认簇，独立版本化；当前为 Candidate 级初审标签） | [~] |
-| 5.2 | 度量学习训练（ArcFace / Triplet / 对比学习） | [~] |
+| 5.2 | 度量学习训练（ArcFace / Triplet / 对比学习）——**r4 重训完成（E5.2，2026-08-25）**：individual_id 作标签（候选级），训练/评估个体彻底隔离，保守口径新批次 R@1 0.238→0.381（+14.3pp）；**生产 `reid_checkpoint` 仍为 r3，切换 r4 待确认**；Triplet 其余变体未试 | [~] |
 | 5.4 | 难例主动审核（低置信边界样本） | [ ] |
 
 **自动化系统**

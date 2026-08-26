@@ -35,6 +35,9 @@ outputs/*
 projects/
 scripts/archive/
 
+# 权重分发包（本地保留，走网盘/Releases，不入库）
+whitewhale_weights_*.zip
+
 # YOLO 检测数据集（由 build_yolo_det_dataset.py 重新生成，含图片不入库）
 datasets/
 
