@@ -30,6 +30,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
+from whitewhale.config import load_config  # noqa: E402
 from whitewhale.reid.embedding import extract_embeddings, make_embedder  # noqa: E402
 
 # 帧号差阈值：<= K 视为同一次目击连拍（弱正样本）
@@ -78,7 +79,8 @@ def run():
     parser.add_argument("--pilot", type=Path, default=base / "outputs" / "pilot" / "pilot_set.csv")
     parser.add_argument("--center-crops", type=Path, default=base / "outputs" / "crops_center_pool")
     parser.add_argument("--yolo-crops", type=Path, default=base / "outputs" / "crops_yolo_pool")
-    parser.add_argument("--images-root", type=Path, default=Path("src_dataset"))
+    parser.add_argument("--images-root", type=Path,
+                        default=Path(load_config("pipeline").get("data_root", "src_dataset")))
     parser.add_argument("--feat-dir", type=Path, default=base / "outputs" / "embeddings_pool_archival")
     parser.add_argument("--out", type=Path, default=base / "outputs" / "reports" / "pool_archival")
     parser.add_argument("--model", default="hf-hub:BVRA/MegaDescriptor-T-224")

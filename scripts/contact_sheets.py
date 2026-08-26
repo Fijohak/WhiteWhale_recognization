@@ -14,18 +14,21 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from whitewhale.config import load_config  # noqa: E402
 from whitewhale.review.contact_sheets import (  # noqa: E402
     build_cluster_contact_sheets, build_contact_sheets)
 
 
 def main():
     base = REPO_ROOT / "outputs"
+    cfg = load_config("pipeline")
     parser = argparse.ArgumentParser(description="生成候选照片拼图（人工审核辅助）")
     parser.add_argument("--pilot", type=Path, default=base / "pilot" / "pilot_set.csv",
                         help="Anchor 组清单（默认模式）")
     parser.add_argument("--clusters", type=Path, default=base / "clusters" / "clusters.csv",
                         help="候选簇照片表（--cluster 模式）")
-    parser.add_argument("--images-root", type=Path, default=Path("src_dataset"),
+    parser.add_argument("--images-root", type=Path,
+                        default=Path(cfg.get("data_root", "src_dataset")),
                         help="图片根目录（含 01/ 03/ 子目录）")
     parser.add_argument("--cluster", action="store_true",
                         help="按 HDBSCAN 候选簇分组（默认按 Anchor 组）")

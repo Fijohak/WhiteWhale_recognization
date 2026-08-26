@@ -11,10 +11,13 @@ from pathlib import Path
 
 import pandas as pd
 
+from whitewhale.data.image_store import ImageStore
+
 
 def load_review_dataset(clusters_csv: Path, images_root: Path) -> pd.DataFrame:
     """加载聚类结果，拼出绝对图片路径（可追溯）。"""
     df = pd.read_csv(clusters_csv)
+    store = ImageStore(images_root)
     df["source_path"] = df["relative_path"].map(
-        lambda p: str(images_root / p))
+        lambda p: str(store.resolve(p)))
     return df

@@ -15,14 +15,14 @@ CLI 入口见 scripts/launch_review.py。
 """
 from __future__ import annotations
 
-import io
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
-from PIL import Image, ImageOps
+
+from whitewhale.data.image_store import ImageStore
 
 # 审核标注约定：confirmed = CI-xxx 个体名；uncertain / reject 为特殊状态
 UNCERTAIN = "uncertain"
@@ -109,8 +109,7 @@ def build_app(args, photos: pd.DataFrame | None = None) -> FastAPI:
     """构建审核应用（photos 可注入，便于测试）。"""
     photos = photos if photos is not None else load_photos(args.clusters)
     ann: dict = load_annotations(args.annotations)
-    images_root = Path(args.images_root)
-    _img_cache: dict[str, bytes] = {}
+    store = ImageStore(args.images_root)
     # 历史库对照照片目录（跨时间审核用，按个体分文件夹）；未指定 → 不提供对照
     history_root = Path(args.history_lookup) if getattr(args, "history_lookup", None) else None
     # 历史对照图质量表（filename → clear/low；未提供 → 全部默认清晰，低质图前端可隐藏）
@@ -347,26 +346,15 @@ def build_app(args, photos: pd.DataFrame | None = None) -> FastAPI:
     @app.get("/api/image/{image_id}")
     def image_file(image_id: str, full: int = 0):
         """缩略图（宽 ≤ 480px）或原图（?full=1，审核放大看背鳍细节，不压缩）。"""
-        if image_id in _img_cache:
-            return Response(_img_cache[image_id], media_type="image/jpeg")
         hit = photos[photos["image_id"] == image_id]
         if hit.empty:
             return Response(status_code=404)
-        p = images_root / str(hit.iloc[0]["relative_path"])
-        if not p.exists():
-            return Response(content=f"图片不存在: {p}", status_code=404)
-        data = p.read_bytes()
-        if not full:
-            img = Image.open(io.BytesIO(data)).convert("RGB")
-            img = ImageOps.exif_transpose(img)
-            if img.width > 480:
-                img = img.resize((480, int(img.height * 480 / img.width)), Image.LANCZOS)
-            buf = io.BytesIO()
-            img.save(buf, "JPEG", quality=82)
-            data = buf.getvalue()
-            _img_cache[image_id] = data
+        rel = str(hit.iloc[0]["relative_path"])
+        if not store.exists(rel):
+            return Response(content=f"图片不存在: {store.resolve(rel)}", status_code=404)
+        data = store.read_bytes(rel) if full else store.thumbnail(rel, 480, 82)
         # 原图按真实扩展名给媒体类型（多数为 JPG）
-        ext = Path(str(hit.iloc[0]["relative_path"])).suffix.lower().lstrip(".")
+        ext = Path(rel).suffix.lower().lstrip(".")
         media = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
                  "bmp": "image/bmp"}.get(ext, "image/jpeg")
         return Response(data, media_type=media)

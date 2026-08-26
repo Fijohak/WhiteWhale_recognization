@@ -24,6 +24,7 @@ import torch.nn.functional as F
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
+from whitewhale.data.image_store import ImageStore
 from whitewhale.reid.embedding import (DEVICE, FEAT_DIM, INPUT_SIZE, ReIDModel,
                                        make_backbone, make_embedder)
 
@@ -33,7 +34,8 @@ def load_confirmed(pilot_csv: Path, images_root: Path) -> pd.DataFrame:
     p = pd.read_csv(pilot_csv)
     df = p[p["confirmed_identity"].notna()
            & (p["confirmed_identity"].astype(str).str.strip() != "")].copy()
-    df["path"] = df["relative_path"].map(lambda rp: str(images_root / rp))
+    store = ImageStore(images_root)
+    df["path"] = df["relative_path"].map(lambda rp: str(store.resolve(rp)))
     id2idx = {iid: i for i, iid in enumerate(sorted(df["confirmed_identity"].unique()))}
     df["label_idx"] = df["confirmed_identity"].map(id2idx)
     return df

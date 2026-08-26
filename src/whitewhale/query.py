@@ -34,6 +34,7 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from PIL import Image
 
+from whitewhale.data.image_store import ImageStore
 from whitewhale.detection.detector import expand_box
 from whitewhale.reid.embedding import (DINOv2Adapter, MegaDescriptorAdapter,
                                        MegaDescriptorMetricAdapter)
@@ -124,7 +125,7 @@ def build_app(args, embedder=None, detector=None) -> FastAPI:
     """
     emb, info = load_gallery(args.embeddings, args.meta, args.pilot)
     gallery_ids = info["image_id"].tolist()
-    images_root = Path(args.images_root)
+    store = ImageStore(args.images_root)
     model_name = resolve_model(args, emb.shape[1])
 
     # 本地离线工具：权重从本地缓存加载（HF_HUB_OFFLINE=1），不访问外网。
@@ -232,10 +233,10 @@ def build_app(args, embedder=None, detector=None) -> FastAPI:
         hit = info[info["image_id"] == image_id]
         if hit.empty:
             return Response(status_code=404)
-        p = images_root / hit.iloc[0]["relative_path"]
-        if not p.exists():
-            return Response(content=f"图片不存在: {p}", status_code=404)
-        return Response(p.read_bytes(), media_type="image/jpeg")
+        rel = str(hit.iloc[0]["relative_path"])
+        if not store.exists(rel):
+            return Response(content=f"图片不存在: {store.resolve(rel)}", status_code=404)
+        return Response(store.read_bytes(rel), media_type="image/jpeg")
 
     return app
 

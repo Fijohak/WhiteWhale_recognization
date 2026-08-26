@@ -185,9 +185,9 @@ class TestContactSheets(unittest.TestCase):
             root = Path("src_dataset")
             df = load_review_dataset(csv, root)
             self.assertEqual(len(df), 9)
-            # 绝对路径 = 图片根 + 相对路径（Windows 分隔符兼容）
+            # 绝对路径 = 图片根(规范化) + 相对路径（Windows 分隔符兼容）
             self.assertTrue(
-                df["source_path"].iloc[0].startswith(str(root))
+                df["source_path"].iloc[0].startswith(str(root.resolve()))
             )
             self.assertIn("01/00/a.jpg", df["source_path"].iloc[0].replace("\\", "/"))
 

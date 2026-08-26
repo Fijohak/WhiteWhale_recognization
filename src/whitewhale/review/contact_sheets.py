@@ -16,6 +16,8 @@ from pathlib import Path
 import pandas as pd
 from PIL import Image, ImageDraw
 
+from whitewhale.data.image_store import ImageStore
+
 GRID_W, GRID_H = 4, 3  # 每张拼图网格
 MOCK = False
 
@@ -24,7 +26,7 @@ def load_image(images_root: Path, rel_path: str):
     """真实模式下读取图片；mock 模式返回占位图。"""
     if MOCK:
         return None
-    return Image.open(images_root / rel_path).convert("RGB")
+    return ImageStore(images_root).open(rel_path)
 
 
 def render_placeholder(size, label):
