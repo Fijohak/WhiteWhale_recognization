@@ -26,7 +26,11 @@ from pathlib import Path
 
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT))
+
+from whitewhale.config import load_config  # noqa: E402
 
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp"}
 
@@ -39,7 +43,9 @@ def main():
     parser.add_argument("--exclude", type=Path,
                         default=base / "outputs" / "det_labels" / "exclude.txt")
     parser.add_argument("--pilot", type=Path, default=base / "outputs" / "pilot" / "pilot_set.csv")
-    parser.add_argument("--images-root", type=Path, default=Path("I:/"), help="原始图片根目录（只读）")
+    parser.add_argument("--images-root", type=Path,
+                        default=Path(load_config("pipeline").get("data_root", "src_dataset")),
+                        help="原始图片根目录（只读）")
     parser.add_argument("--out", type=Path, default=base / "datasets" / "dorsal_fin")
     parser.add_argument("--val-sessions", default=None,
                         help="指定验证 session 列表（逗号分隔，如 '3'）；默认按 sequence 洗牌 20%")

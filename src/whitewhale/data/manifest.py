@@ -1,7 +1,7 @@
 """
 数据集扫描与 Pilot Set 清单生成（正式入口 prepare_data 的核心）。
 
-- scan_dataset：扫描数据根（I:\\01、I:\\03），按路径语义解析
+- scan_dataset：扫描数据根（src_dataset 下批次），按路径语义解析
   session / quality_band / group_id / label_status，输出 dataset_manifest.csv、
   dataset_stats.json、dataset_tree.txt、unreadable_files.csv；
 - build_pilot_set：从 manifest 挑选高分 Anchor 照片生成 pilot_set.csv
@@ -241,6 +241,8 @@ def collect_band_group_ids(root: Path) -> dict[str, dict[str, list[str]]]:
 
 def scan_dataset(data_roots: list[Path], output_dir: Path, include_sha256: bool) -> None:
     """扫描所有数据根目录，汇总生成 Manifest 与统计信息。"""
+    # yaml 解析出的 data_roots 为 str，统一包装为 Path（兼容 str / Path 混合传入）
+    data_roots = [Path(r) for r in data_roots]
     for root in data_roots:
         if not root.exists():
             raise FileNotFoundError(f"数据目录不存在：{root}")
@@ -451,7 +453,7 @@ def build_pilot_set(manifest_path: Path, out_dir: Path) -> None:
     anchors = df[df["label_status"] == "labeled"].copy()
     # 散图（loose_known）暂不纳入 Pilot（用户决定现阶段不处理散图）
 
-    # 含根前缀的完整相对路径（相对数据根 I:\，含 01/ 03/），供下游直接拼根读取
+    # 含根前缀的完整相对路径（相对数据根 src_dataset，含批次目录），供下游直接拼根读取
     anchors["relative_path"] = anchors["session_id"] + "/" + anchors["relative_path"]
 
     # Anchor 组标识 = {session}_{group_id}（跨调查同名编号未合并，非全局 ID）

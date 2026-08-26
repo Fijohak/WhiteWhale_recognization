@@ -23,11 +23,14 @@ from pathlib import Path
 
 import pandas as pd
 
+from whitewhale.data.image_store import get_image_store
 from whitewhale.detection.detector import detect_and_crop
 from whitewhale.pipeline.archival import run as run_archival
 from whitewhale.reid.embedding import extract_embeddings, make_embedder
 
 BASE = Path(__file__).resolve().parents[3]
+# 数据根只从 config 读取一次（消除硬编码）
+DATA_ROOT = get_image_store().root
 MANIFEST = BASE / "outputs" / "index" / "dataset_manifest.csv"
 PILOT = BASE / "outputs" / "pilot" / "pilot_set.csv"
 CKPT = BASE / "outputs" / "metric_learning" / "r3" / "best.pt"
@@ -50,7 +53,7 @@ def build_gallery() -> None:
     print(f"[gallery] 历史库 {len(gal)} 张（{gal['session_id'].value_counts().to_dict()}）")
 
     crops_dir = BASE / "outputs" / "crops_yolo_gallery"
-    man = detect_and_crop(gal, Path("I:/"), crops_dir, DET_WEIGHTS,
+    man = detect_and_crop(gal, DATA_ROOT, crops_dir, DET_WEIGHTS,
                           preview=False)
     model = make_embedder("metric-learning", metric_ckpt=CKPT)
     extract_embeddings(
@@ -88,7 +91,7 @@ def build_query_manifest(session: str, m: pd.DataFrame) -> Path:
 def run_batch(session: str, m: pd.DataFrame) -> None:
     man = build_query_manifest(session, m)
     args = argparse.Namespace(
-        pool=False, input_manifest=man, images_root=Path("I:/"), ckpt=CKPT,
+        pool=False, input_manifest=man, images_root=DATA_ROOT, ckpt=CKPT,
         gallery_embeddings=GAL_NPY, gallery_meta=GAL_META,
         min_cluster_size=3, subcluster_min_size=4, topk=3,
         threshold_cluster=0.58, threshold_image=0.50,

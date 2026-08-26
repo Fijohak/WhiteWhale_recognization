@@ -26,7 +26,11 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageDraw
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT))
+
+from whitewhale.config import load_config  # noqa: E402
 
 # SAM 依赖延迟导入（未安装时仍可查看帮助）
 def _load_sam(checkpoint: Path, device: str):
@@ -94,7 +98,9 @@ def main():
     base = Path(__file__).resolve().parents[1] / "outputs"
     parser = argparse.ArgumentParser(description="SAM 辅助背鳍框预标注")
     parser.add_argument("--pilot", type=Path, default=base / "pilot" / "pilot_set.csv")
-    parser.add_argument("--images-root", type=Path, default=Path("I:/"), help="原始图片根目录（只读）")
+    parser.add_argument("--images-root", type=Path,
+                        default=Path(load_config("pipeline").get("data_root", "src_dataset")),
+                        help="原始图片根目录（只读）")
     parser.add_argument("--checkpoint", type=Path,
                         default=Path(__file__).resolve().parents[1] / "models" / "detectors" / "sam_vit_b_01ec64.pth")
     parser.add_argument("--out", type=Path, default=base / "det_labels")

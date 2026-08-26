@@ -38,7 +38,7 @@ def main():
     parser.add_argument("--batch-name", default="batch",
                         help="批次标识（输出目录名）")
     parser.add_argument("--images-root", type=Path,
-                        default=Path(cfg.get("data_root", "I:/")),
+                        default=Path(cfg.get("data_root", "src_dataset")),
                         help="图片根目录（只读）")
     parser.add_argument("--ckpt", type=Path,
                         default=REPO_ROOT / cfg.get("reid_checkpoint",

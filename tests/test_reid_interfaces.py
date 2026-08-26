@@ -169,7 +169,7 @@ class TestContactSheets(unittest.TestCase):
             csv = Path(tmp) / "clusters.csv"
             self._clusters_df().to_csv(csv, index=False)
             out = Path(tmp) / "sheets"
-            build_cluster_contact_sheets(csv, out, Path("I:/"), mock=True)
+            build_cluster_contact_sheets(csv, out, Path("src_dataset"), mock=True)
             files = sorted(p.name for p in out.glob("*.jpg"))
             self.assertEqual(files, ["cluster_000.jpg", "cluster_001.jpg", "noise.jpg"])
             # 噪声与候选簇分属不同文件（-1 合法噪声，不强制分配）
@@ -182,12 +182,12 @@ class TestContactSheets(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             csv = Path(tmp) / "clusters.csv"
             self._clusters_df().to_csv(csv, index=False)
-            root = Path("I:/")
+            root = Path("src_dataset")
             df = load_review_dataset(csv, root)
             self.assertEqual(len(df), 9)
-            # 绝对路径 = 图片根 + 相对路径（Windows 分隔符兼容）
+            # 绝对路径 = 图片根(规范化) + 相对路径（Windows 分隔符兼容）
             self.assertTrue(
-                df["source_path"].iloc[0].startswith(str(root))
+                df["source_path"].iloc[0].startswith(str(root.resolve()))
             )
             self.assertIn("01/00/a.jpg", df["source_path"].iloc[0].replace("\\", "/"))
 

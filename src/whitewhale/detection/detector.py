@@ -18,6 +18,8 @@ from pathlib import Path
 import pandas as pd
 from PIL import Image
 
+from whitewhale.data.image_store import ImageStore
+
 
 def expand_box(x0: float, y0: float, x1: float, y1: float,
                w: int, h: int, px: float, up: float, down: float):
@@ -67,12 +69,13 @@ def detect_and_crop(df: pd.DataFrame, images_root: Path, out_dir: Path,
         preview_dir.mkdir(parents=True, exist_ok=True)
 
     rows, failures = [], []
+    store = ImageStore(images_root)
     for i, r in df.iterrows():
-        src = images_root / r["relative_path"]
+        src = store.resolve(r["relative_path"])
         if not src.exists():
             failures.append((r["image_id"], "原图不存在"))
             continue
-        img = Image.open(src).convert("RGB")
+        img = store.open(r["relative_path"])
         w, h = img.size
         res = model.predict(str(src), conf=conf, imgsz=imgsz, device=device,
                             verbose=False)

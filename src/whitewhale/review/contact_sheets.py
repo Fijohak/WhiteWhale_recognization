@@ -6,7 +6,7 @@
 - build_cluster_contact_sheets：按 HDBSCAN 候选簇（Candidate Cluster）分组
   输出，供人工审核逐簇核对（-1 噪声单独一张，仅提醒不强制分配）。
 
-真实运行需要图片根（I:/）；mock 模式生成占位色块验证布局逻辑。
+真实运行需要图片根（src_dataset）；mock 模式生成占位色块验证布局逻辑。
 """
 from __future__ import annotations
 
@@ -16,6 +16,8 @@ from pathlib import Path
 import pandas as pd
 from PIL import Image, ImageDraw
 
+from whitewhale.data.image_store import ImageStore
+
 GRID_W, GRID_H = 4, 3  # 每张拼图网格
 MOCK = False
 
@@ -24,7 +26,7 @@ def load_image(images_root: Path, rel_path: str):
     """真实模式下读取图片；mock 模式返回占位图。"""
     if MOCK:
         return None
-    return Image.open(images_root / rel_path).convert("RGB")
+    return ImageStore(images_root).open(rel_path)
 
 
 def render_placeholder(size, label):

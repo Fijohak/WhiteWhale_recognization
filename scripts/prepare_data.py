@@ -2,7 +2,7 @@
 数据准备（正式入口 1/7）：扫描数据集 → 生成 Manifest → 生成 Pilot Set 清单。
 
 用法：
-    python scripts/prepare_data.py scan          # 扫描 I:\\01 I:\\03 → outputs/index/
+    python scripts/prepare_data.py scan          # 扫描 src_dataset 下 9 个批次 → outputs/index/
     python scripts/prepare_data.py build-pilot   # Manifest → outputs/pilot/pilot_set.csv
 
 数据语义：
@@ -22,7 +22,7 @@ from whitewhale.data.manifest import build_pilot_set, scan_dataset  # noqa: E402
 
 def main():
     cfg = load_config("pipeline")
-    default_roots = cfg.get("data_roots") or [Path(cfg.get("data_root", "I:/")) / d
+    default_roots = cfg.get("data_roots") or [Path(cfg.get("data_root", "src_dataset")) / d
                                               for d in ("01", "03")]
     parser = argparse.ArgumentParser(description="数据集扫描与 Pilot Set 生成")
     sub = parser.add_subparsers(dest="cmd", required=True)

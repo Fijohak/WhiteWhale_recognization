@@ -24,6 +24,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image
 
+from whitewhale.data.image_store import ImageStore
+
 # MegaDescriptor 输入规格
 INPUT_SIZE = 224
 FEAT_DIM = 768
@@ -333,6 +335,7 @@ def extract_embeddings(
 
     feat_dim = model.feat_dim or FEAT_DIM
     feats, missing_rows = [], []
+    store = ImageStore(images_root) if images_root is not None else None
     with torch.no_grad():
         for i in range(0, len(m), batch_size):
             chunk = m.iloc[i:i + batch_size]
@@ -342,9 +345,9 @@ def extract_embeddings(
                 if crops_dir is not None:
                     p = crops_dir / f"{row['image_id']}.jpg"
                 else:
-                    if images_root is None:
+                    if store is None:
                         raise ValueError("整图模式需要 images_root")
-                    p = images_root / row["relative_path"]
+                    p = store.resolve(row["relative_path"])
                 if not p.exists():
                     missing_rows.append((row["image_id"], str(p)))
                     continue
