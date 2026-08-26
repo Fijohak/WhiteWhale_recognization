@@ -238,7 +238,12 @@ def run_training(args, df: pd.DataFrame, out_dir: Path):
         tr_loader = DataLoader(tr_ds, batch_sampler=sampler)
         if getattr(args, "init_ckpt", None) and Path(args.init_ckpt).exists():
             ckpt = torch.load(args.init_ckpt, map_location=DEVICE)
-            missing, unexpected = model.load_state_dict(ckpt["state"], strict=False)
+            # head 层形状随训练个体数变化（768×n_classes）：形状不匹配的键
+            # 跳过（head 阶段一会重新训练），backbone 知识照常继承
+            cur_state = model.state_dict()
+            state = {k: v for k, v in ckpt["state"].items()
+                     if k in cur_state and v.shape == cur_state[k].shape}
+            missing, unexpected = model.load_state_dict(state, strict=False)
             print(f"[train] 初始化自 {args.init_ckpt}（missing {len(missing)} 项 = head 层；"
                   f"unexpected {len(unexpected)} 项）")
     else:
