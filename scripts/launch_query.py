@@ -29,11 +29,11 @@ def main():
     parser = argparse.ArgumentParser(description="本地图库个体查询 Web 客户端")
     parser.add_argument("--embeddings", type=Path,
                         default=base / query_cfg.get(
-                            "embeddings", "embeddings/embeddings_metric_r3_yolocrop.npy"),
-                        help="gallery 特征（r3 微调 + YOLO 裁剪，见同名 _config.json）")
+                            "embeddings", "embeddings/embeddings_metric_r4_yolocrop_v2.npy"),
+                        help="gallery 特征（r4 微调 + YOLO 裁剪，见同名 _config.json）")
     parser.add_argument("--meta", type=Path,
                         default=base / query_cfg.get(
-                            "meta", "embeddings/embeddings_metric_r3_yolocrop_meta.csv"))
+                            "meta", "embeddings/embeddings_metric_r4_yolocrop_v2_meta.csv"))
     parser.add_argument("--pilot", type=Path,
                         default=base / query_cfg.get("pilot", "pilot/pilot_set.csv"))
     parser.add_argument("--images-root", type=Path,
@@ -46,7 +46,7 @@ def main():
                         help="DINOv2 官方权重 .pth（gallery 为 dinov2 特征时必填）")
     parser.add_argument("--metric-ckpt", type=Path,
                         default=REPO_ROOT / cfg.get(
-                            "reid_checkpoint", "outputs/metric_learning/r3/best.pt"),
+                            "reid_checkpoint", "outputs/metric_learning/r4/best.pt"),
                         help="伪标签微调权重（gallery 为 metric-learning 特征时使用）")
     parser.add_argument("--k", type=int, default=query_cfg.get("k", 10))
     parser.add_argument("--threshold", type=float,

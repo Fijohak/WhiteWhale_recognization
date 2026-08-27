@@ -110,10 +110,10 @@ def main():
     base = REPO_ROOT / "outputs"
     parser = argparse.ArgumentParser(description="特征库检索评估（正式度量入口）")
     parser.add_argument("--embeddings", type=Path,
-                        default=base / "embeddings" / "embeddings_metric_r3_yolocrop.npy",
+                        default=base / "embeddings" / "embeddings_metric_r4_yolocrop_v2.npy",
                         help="特征（meta 需含 confirmed_identity）")
     parser.add_argument("--meta", type=Path,
-                        default=base / "embeddings" / "embeddings_metric_r3_yolocrop_meta.csv")
+                        default=base / "embeddings" / "embeddings_metric_r4_yolocrop_v2_meta.csv")
     parser.add_argument("--mode", choices=["retrieval", "pairs"], default="retrieval",
                         help="retrieval = 个体级 R@1/mAP；pairs = 分数分布 + 阈值建议")
     parser.add_argument("--seed", type=int, default=42)

@@ -2,16 +2,16 @@
 跨时间批次管线驱动（E7 首跑验证，正式流程）。
 
 流程：
-1. 历史库 gallery：20140806 01/03 的 labeled（43 组）→ YOLO 裁剪 → r3 特征；
+1. 历史库 gallery：20140806 01/03 的 labeled（43 组）→ YOLO 裁剪 → r4 特征；
    个体标识 = individual_id（Anchor 组，Candidate 级历史库，人工确认前
    假设组=个体，与 E3-E5 评估口径一致）；
 2. 新批次逐个（按 session）跑批内归档管线（见 whitewhale.pipeline.archival）：
-   检测裁剪 → r3 特征 → HDBSCAN 批内候选聚类 → 子簇化 →
+   检测裁剪 → r4 特征 → HDBSCAN 批内候选聚类 → 子簇化 →
    簇级多帧投票匹配历史库 → 代表图 + 候选簇拼图（人工审核材料）。
 
 输出：
 - outputs/crops_yolo_gallery/                 历史库裁剪图
-- outputs/embeddings/embeddings_metric_r3_yolocrop_v2.npy(+meta)  历史库特征
+- outputs/embeddings/embeddings_metric_r4_yolocrop_v2.npy(+meta)  历史库特征
 - outputs/cluster_archival/cross_time/<session>/  每批结果
 
 CLI 入口见 scripts/run_cross_time_batch.py。
@@ -33,16 +33,16 @@ BASE = Path(__file__).resolve().parents[3]
 DATA_ROOT = get_image_store().root
 MANIFEST = BASE / "outputs" / "index" / "dataset_manifest.csv"
 PILOT = BASE / "outputs" / "pilot" / "pilot_set.csv"
-CKPT = BASE / "outputs" / "metric_learning" / "r3" / "best.pt"
+CKPT = BASE / "outputs" / "metric_learning" / "r4" / "best.pt"
 DET_WEIGHTS = BASE / "models" / "detectors" / "yolov8n_dorsalfin.pt"
 GALLERY_SESSIONS = ["20140806 01", "20140806 03"]
 OUT_ROOT = BASE / "outputs" / "cluster_archival" / "cross_time"
-GAL_NPY = BASE / "outputs" / "embeddings" / "embeddings_metric_r3_yolocrop_v2.npy"
+GAL_NPY = BASE / "outputs" / "embeddings" / "embeddings_metric_r4_yolocrop_v2.npy"
 GAL_META = GAL_NPY.with_name(GAL_NPY.stem + "_meta.csv")
 
 
 def build_gallery() -> None:
-    """历史库：20140806 的 labeled → 检测裁剪 → r3 特征 → confirmed_identity=individual_id。"""
+    """历史库：20140806 的 labeled → 检测裁剪 → r4 特征 → confirmed_identity=individual_id。"""
     m = pd.read_csv(MANIFEST, dtype={"session_id": str})
     gal = m[m["session_id"].isin(GALLERY_SESSIONS) & (m["label_status"] == "labeled")]
     gal_csv = OUT_ROOT / "gallery_manifest.csv"

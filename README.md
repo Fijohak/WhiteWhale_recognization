@@ -126,7 +126,7 @@ src_dataset/20140806 01（示例批次，历史库；调查 20140417W01，地点
 ## 3. 环境
 
 - Python 3.13+，依赖见 `requirements.txt`（torch、timm、fastapi、pandas、numpy、hdbscan、ultralytics、PyYAML）——**新环境先执行 `pip install -r requirements.txt`（网络慢可加清华镜像 `-i https://pypi.tuna.tsinghua.edu.cn/simple`）；运行报 `ModuleNotFoundError` 时请先检查是否已按此安装依赖，再排查其他问题**
-- 模型权重与原始数据不入库（`models/`、`*.pt`、`outputs/*` 已被 git 忽略，**请勿直接 commit 权重文件**）：检测器 `models/detectors/yolov8n_dorsalfin.pt`，r3 特征权重 `outputs/metric_learning/r3/best.pt`，原图 `src_dataset/`
+- 模型权重与原始数据不入库（`models/`、`*.pt`、`outputs/*` 已被 git 忽略，**请勿直接 commit 权重文件**）：检测器 `models/detectors/yolov8n_dorsalfin.pt`，r4 特征权重 `outputs/metric_learning/r4/best.pt`，原图 `src_dataset/`
 - **权重获取方式**：自训练权重（检测器 + r3/r4 + 训练记录）打包为 `whitewhale_weights_2026-08-26.zip`（约 200MB，含包内说明 `README.md`）——从网盘分享或项目 Releases 附件下载，**解压到仓库根目录即可**（路径与 `configs/pipeline.yaml` 自动对齐，无需改配置）；MegaDescriptor-T-224 特征模型首次运行自动下载，无需手动获取；ultralytics 官方预训练等仅重训检测器时才需要
 - 所有入口默认值从 `configs/*.yaml` 读取，可用 CLI 参数覆盖
 
@@ -146,7 +146,7 @@ python scripts/prepare_data.py build-pilot        # 由 manifest 生成 pilot_se
 
 ### 4.2 批内归档管线 `scripts/run_pipeline.py`
 
-新批次全流程：YOLO 背鳍检测裁剪 → r3 特征 → HDBSCAN 批内候选聚类 → 子簇化 → 簇级多帧投票匹配历史库 → 代表图 + 候选簇拼图（人工审核材料）。
+新批次全流程：YOLO 背鳍检测裁剪 → r4 特征 → HDBSCAN 批内候选聚类 → 子簇化 → 簇级多帧投票匹配历史库 → 代表图 + 候选簇拼图（人工审核材料）。
 
 ```bash
 # 散图池验证模式（复用已预提取的池特征产物）
@@ -160,7 +160,7 @@ python scripts/run_pipeline.py --input-manifest outputs/index/dataset_manifest.c
 | 关键参数 | 默认 | 说明 |
 |---|---|---|
 | `--pool` / `--input-manifest` | 二选一必填 | 散图池验证 / 新批次清单 |
-| `--gallery-embeddings` | `outputs/embeddings/embeddings_metric_r3_yolocrop.npy` | 历史个体库特征（r3 + YOLO 裁剪） |
+| `--gallery-embeddings` | `outputs/embeddings/embeddings_metric_r4_yolocrop_v2.npy` | 历史个体库特征（r4 + YOLO 裁剪） |
 | `--threshold-cluster` | 0.58 | 簇级匹配阈值（E5 标定 FA≤5%，语义"宁可多标疑似"） |
 | `--threshold-image` | 0.50 | 单图投票阈值下限（E4 标定） |
 | `--out` | `outputs/cluster_archival` | 输出目录（内部按 batch_name 分目录） |
@@ -179,7 +179,7 @@ python scripts/launch_review.py --export                 # 导出审核结果（
 
 ### 4.4 个体查询客户端 `scripts/launch_query.py`
 
-上传一张背鳍照片 → YOLO 检测裁剪（未检出回退整图）→ r3 特征 → 全库 Top-K 检索，输出三态判定：
+上传一张背鳍照片 → YOLO 检测裁剪（未检出回退整图）→ r4 特征 → 全库 Top-K 检索，输出三态判定：
 
 - `known`：最高相似度 ≥ 阈值，展示 Top-K 候选（仍需人工核验）；
 - `unknown`：最高相似度 < 阈值，提示"疑似未知个体（可能新个体）"，仍返回 Top-K 供参考。
@@ -195,7 +195,7 @@ python scripts/launch_query.py                    # http://127.0.0.1:8000
 用人工确认的伪标签训练特征模型（ArcFace 度量学习两阶段：冻结 backbone 训 head → 解冻微调）：
 
 ```bash
-python scripts/train_reid.py                          # r3：跨群 hard negative 微调（默认，正式特征源）
+python scripts/train_reid.py --out outputs/metric_learning/r4      # r4 重训（E5.2：individual_id 标签，正式特征源）
 python scripts/train_reid.py --no-hard-negative       # r1/r2 历史链路（纯 ArcFace CE）
 python scripts/train_reid.py --extract                # 训练后重新提取特征
 ```
@@ -205,14 +205,14 @@ python scripts/train_reid.py --extract                # 训练后重新提取特
 在已提取特征上评估检索指标（个体级 R@1 / mAP）或对级相似度分布（FA5% 阈值建议）：
 
 ```bash
-python scripts/evaluate.py --embeddings outputs/embeddings/embeddings_metric_r3_yolocrop.npy \
-    --meta outputs/embeddings/embeddings_metric_r3_yolocrop_meta.csv --mode retrieval
+python scripts/evaluate.py --embeddings outputs/embeddings/embeddings_metric_r4_yolocrop_v2.npy \
+    --meta outputs/embeddings/embeddings_metric_r4_yolocrop_v2_meta.csv --mode retrieval
 python scripts/evaluate.py --mode pairs   # 同/跨个体余弦分布 + 阈值建议
 ```
 
 ### 4.7 跨时间批次驱动 `scripts/run_cross_time_batch.py`
 
-历史库（20140806 01/03 labeled）→ YOLO 裁剪 + r3 特征 → 逐个新批次跑批内归档管线并匹配历史库（实验 E7 验证的真实流程）：
+历史库（20140806 01/03 labeled）→ YOLO 裁剪 + r4 特征 → 逐个新批次跑批内归档管线并匹配历史库（实验 E7 验证的真实流程）：
 
 ```bash
 python scripts/run_cross_time_batch.py                       # 全流程（7 个新批次，E7 验证）
@@ -257,7 +257,7 @@ WhiteWhale_recognization/
 │   ├── run_pipeline.py        #   2. 批内归档管线（检测→聚类→子簇→匹配→审核材料）
 │   ├── launch_review.py       #   3. 人工审核网页（:8001）
 │   ├── launch_query.py        #   4. 个体查询客户端（:8000）
-│   ├── train_reid.py          #   5. 特征训练（r3 正式链路）
+│   ├── train_reid.py          #   5. 特征训练（r3/r4 共入口，正式特征源 = r4）
 │   ├── evaluate.py            #   6. 检索指标 / 对级分布评估
 │   ├── run_cross_time_batch.py#   7. 跨时间批次驱动
 │   ├── finalize_history_verify.py#  8. 历史库核验回填（3.6 步骤4 自动化）
@@ -341,7 +341,7 @@ python -m pytest tests/ -v
 | # | 任务 | 状态 |
 |---|---|---|
 | 5.1 | 生成伪标签（仅高可信确认簇，独立版本化；当前为 Candidate 级初审标签） | [~] |
-| 5.2 | 度量学习训练（ArcFace / Triplet / 对比学习）——**r4 重训完成（E5.2，2026-08-25）**：individual_id 作标签（候选级），训练/评估个体彻底隔离，保守口径新批次 R@1 0.238→0.381（+14.3pp）；**生产 `reid_checkpoint` 仍为 r3，切换 r4 待确认**；Triplet 其余变体未试 | [~] |
+| 5.2 | 度量学习训练（ArcFace / Triplet / 对比学习）——**r4 重训完成（E5.2，2026-08-25）**：individual_id 作标签（候选级），训练/评估个体彻底隔离，保守口径新批次 R@1 0.238→0.381（+14.3pp）；**生产 `reid_checkpoint` 已切换 r4（2026-08-26）**；Triplet 其余变体未试 | [~] |
 | 5.4 | 难例主动审核（低置信边界样本） | [ ] |
 
 **自动化系统**

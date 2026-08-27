@@ -130,13 +130,13 @@ def main():
     base = Path(__file__).resolve().parents[3] / "outputs"
     parser = argparse.ArgumentParser(description="同群散图划分（群内 Top-K 候选）")
     parser.add_argument("--pool-embeddings", type=Path,
-                        default=base / "embeddings" / "embeddings_pool_r3_yolocrop.npy",
-                        help="散图 r3+YOLO 裁剪特征（预提取）")
+                        default=base / "embeddings" / "embeddings_pool_r4_yolocrop.npy",
+                        help="散图 r4+YOLO 裁剪特征（预提取）")
     parser.add_argument("--pool-meta", type=Path,
-                        default=base / "embeddings" / "embeddings_pool_r3_yolocrop_meta.csv")
+                        default=base / "embeddings" / "embeddings_pool_r4_yolocrop_meta.csv")
     parser.add_argument("--gallery-embeddings", type=Path,
-                        default=base / "embeddings" / "embeddings_metric_r3_yolocrop.npy",
-                        help="已确认个体的 r3+YOLO 裁剪特征")
+                        default=base / "embeddings" / "embeddings_metric_r4_yolocrop_v2.npy",
+                        help="已确认个体的 r4+YOLO 裁剪特征")
     parser.add_argument("--gallery-meta", type=Path,
                         default=base / "embeddings" / "embeddings_metric_r3_yolocrop_meta.csv")
     parser.add_argument("--topk", type=int, default=5)

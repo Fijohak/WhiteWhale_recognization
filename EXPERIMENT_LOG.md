@@ -522,3 +522,5 @@ Wilcoxon 配对检验 p=3.4e-16（差值中位 +0.045）→ **极显著**：YOLO
 **产物**：`experiments/prep_train_hist.py`、`outputs/pilot/pilot_set_train_hist.csv`、`outputs/metric_learning/r4/`（best.pt + history + metrics.json + `training_curves.png` + `train_report.md`，由 `experiments/plot_r4_training.py` 生成）、`outputs/embeddings/embeddings_eval51_all_r4.npy(+meta)`、`outputs/reports/cluster_retrieval_v2/metrics{_conservative,_series_split}__r4.json`（注意双下划线为 r4 后缀）与三口径对照图 `eval51_r3_vs_r4.png`。训练代码修改：[training.py](src/whitewhale/reid/training.py) init_ckpt 按形状过滤键。
 
 **维护（同日）**：清理 `outputs/` 下 19 个历史调试临时文件（`_tmp_*.py/.js/.log`，2026-08-19~23 遗留，未跟踪未引用，删除无影响）；生产链路 `configs/pipeline.yaml` 的 `reid_checkpoint` 仍指向 r3，切换 r4 待确认。
+
+**切换 r4（2026-08-26，用户决定）**：`reid_checkpoint` 改为 `outputs/metric_learning/r4/best.pt`；历史库 gallery 特征重新提取为 `embeddings_metric_r4_yolocrop_v2.npy`（`--only-gallery`，与旧 r3 文件同构）、散图池特征切分为 `embeddings_pool_r4_yolocrop.npy`；`cross_time.py`/`archival.py`/`assign_pool.py`/`run_pipeline.py`/`launch_query.py`/`evaluate.py` 的 r3 默认值全部同步为 r4，并统一 v1/v2 命名（全部指向 v2，消除历史复制坑）；本地数据目录用 junction `src_dataset/` → `I:/` 重定向（私人设置，不入库）。r3 权重与特征保留未删，可随时回退。

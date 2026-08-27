@@ -55,12 +55,12 @@ def run(args) -> None:
     out_dir = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # ---------- 阶段 1-2：检测裁剪 + r3 特征（新批次）或复用散图池产物 ----------
+    # ---------- 阶段 1-2：检测裁剪 + r4 特征（新批次）或复用散图池产物 ----------
     crops_dir = None
     if args.pool:
-        emb_path = base / "embeddings" / "embeddings_pool_r3_yolocrop.npy"
-        meta_path = base / "embeddings" / "embeddings_pool_r3_yolocrop_meta.csv"
-        print("[pipeline] 散图池模式：复用预提取 r3+YOLO 特征")
+        emb_path = base / "embeddings" / "embeddings_pool_r4_yolocrop.npy"
+        meta_path = base / "embeddings" / "embeddings_pool_r4_yolocrop_meta.csv"
+        print("[pipeline] 散图池模式：复用预提取 r4+YOLO 特征")
     else:
         # 新批次：检测裁剪 → 特征
         from whitewhale.reid.embedding import extract_embeddings, make_embedder

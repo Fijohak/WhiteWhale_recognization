@@ -32,7 +32,7 @@ def main():
     crop = cfg.get("crop", {})
     parser = argparse.ArgumentParser(description="批内簇级归档管线")
     parser.add_argument("--pool", action="store_true",
-                        help="散图池模式：复用 outputs/embeddings/ 预提取 r3+YOLO 特征")
+                        help="散图池模式：复用 outputs/embeddings/ 预提取 r4+YOLO 特征")
     parser.add_argument("--input-manifest", type=Path, default=None,
                         help="新批次图片清单（image_id, relative_path[, session_id]）")
     parser.add_argument("--batch-name", default="batch",
@@ -42,13 +42,13 @@ def main():
                         help="图片根目录（只读）")
     parser.add_argument("--ckpt", type=Path,
                         default=REPO_ROOT / cfg.get("reid_checkpoint",
-                                                    "outputs/metric_learning/r3/best.pt"),
-                        help="r3 微调权重（新批次模式）")
+                                                    "outputs/metric_learning/r4/best.pt"),
+                        help="r4 微调权重（新批次模式）")
     parser.add_argument("--gallery-embeddings", type=Path,
-                        default=base / "embeddings" / "embeddings_metric_r3_yolocrop.npy",
+                        default=base / "embeddings" / "embeddings_metric_r4_yolocrop_v2.npy",
                         help="历史库特征（已确认个体）")
     parser.add_argument("--gallery-meta", type=Path,
-                        default=base / "embeddings" / "embeddings_metric_r3_yolocrop_meta.csv")
+                        default=base / "embeddings" / "embeddings_metric_r4_yolocrop_v2_meta.csv")
     parser.add_argument("--min-cluster-size", type=int, default=clut.get("min_cluster_size", 3))
     parser.add_argument("--subcluster-min-size", type=int,
                         default=clut.get("subcluster_min_size", 4),

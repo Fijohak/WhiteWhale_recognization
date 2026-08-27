@@ -14,7 +14,7 @@ data_roots:                                   # prepare_data scan 的扫描根�
   - src_dataset/20151017 03
 output_root: outputs
 detector_checkpoint: models/detectors/yolov8n_dorsalfin.pt   # YOLO 背鳍检测器（E1）
-reid_checkpoint: outputs/metric_learning/r3/best.pt          # r3 跨群 HN 微调权重（正式特征源）
+reid_checkpoint: outputs/metric_learning/r4/best.pt          # r4 微调权重（E5.2 individual_id 重训，正式特征源）
 
 crop:                                          # 检测框非均匀扩展（E2 标定）
   pad_x: 0.30
@@ -34,9 +34,9 @@ review:                                        # launch_review
   port: 8001
   host: 127.0.0.1
 
-query:                                         # launch_query（gallery = r3+YOLO 裁剪特征）
-  embeddings: embeddings/embeddings_metric_r3_yolocrop.npy
-  meta: embeddings/embeddings_metric_r3_yolocrop_meta.csv
+query:                                         # launch_query（gallery = r4+YOLO 裁剪特征）
+  embeddings: embeddings/embeddings_metric_r4_yolocrop_v2.npy
+  meta: embeddings/embeddings_metric_r4_yolocrop_v2_meta.csv
   pilot: pilot/pilot_set.csv
   threshold: 0.55                              # 三态判定（E4 标定 FA≤5% 区间中值）
   k: 10
