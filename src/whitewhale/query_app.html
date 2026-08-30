@@ -85,8 +85,9 @@
 
 <footer>
   <div class="rule">
-    说明：目录名（源组）与候选簇均为弱信息 / 候选分组，不代表正式个体 ID；未知判定阈值由服务端参数决定；
-    所有候选必须人工核验。数据可追溯：image_id / 源组 / 会话 / 质量带。
+    说明：目录名（源组）与候选簇均为弱信息 / 候选分组，不代表正式个体 ID；
+    当前 known/unknown 阈值尚未完成独立开放集标定，只能作为候选提示；所有候选必须人工核验。
+    数据可追溯：image_id / 源组 / 会话 / 质量带。
   </div>
 </footer>
 
@@ -170,7 +171,8 @@ function render(data) {
   }).join('');
 
   resultBox.innerHTML = banner + `<div class="grid">${cards}</div>`
-    + `<p style="font-size:11px;color:var(--muted);margin-top:12px">图库规模：${data.n_gallery} 张 · 判定阈值：${data.threshold}</p>`;
+    + `<p style="font-size:11px;color:#b45309;margin-top:12px">⚠ ${esc(data.threshold_warning)}</p>`
+    + `<p style="font-size:11px;color:var(--muted);margin-top:6px">图库规模：${data.n_gallery} 张 · 候选提示阈值：${data.threshold}</p>`;
 }
 </script>
 </body>

@@ -11,6 +11,7 @@ fastapi
 uvicorn
 python-multipart
 hdbscan                # HDBSCAN 候选聚类（run_pipeline 正式依赖）
+filelock>=3.25,<3.26   # 审核票/累计导出 advisory lock（持久锁适配 3.25 API）
 
 # 可选（按需安装）
 # faiss-cpu            # Faiss Top-K 加速

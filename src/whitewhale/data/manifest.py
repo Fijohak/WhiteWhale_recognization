@@ -4,13 +4,13 @@
 - scan_dataset：扫描数据根（src_dataset 下批次），按路径语义解析
   session / quality_band / group_id / label_status，输出 dataset_manifest.csv、
   dataset_stats.json、dataset_tree.txt、unreadable_files.csv；
-- build_pilot_set：从 manifest 挑选高分 Anchor 照片生成 pilot_set.csv
-  （individual_id = {session}_{group_id}，Anchor 组标识，**非已确认个体**）。
+- build_pilot_set：从 manifest 选出已分组照片生成 pilot_set.csv
+  （individual_id = {session}_{group_id}，表示批次内已确认个体）。
 
 数据语义（2026-08-07/11 用户确认）：
 - 80 and above / 70-79 下的子文件夹 = 已分好的白海豚个体（可作为标签）；
 - 70-79 散图 = loose_known（归属未确认的 candidate-label）；
-- 高分目录数字子文件夹 = Anchor 代表照片组（非个体 ID）。
+- 高分目录数字子文件夹 = 批次内已确认个体；编号不跨批次复用为全局 ID。
 
 CLI 入口见 scripts/prepare_data.py。
 """
@@ -249,8 +249,6 @@ def scan_dataset(data_roots: list[Path], output_dir: Path, include_sha256: bool)
         if not root.is_dir():
             raise NotADirectoryError(f"路径不是目录：{root}")
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     rows: list[dict[str, Any]] = []
     unreadable_rows: list[dict[str, str]] = []
 
@@ -338,6 +336,20 @@ def scan_dataset(data_roots: list[Path], output_dir: Path, include_sha256: bool)
                     "relative_path": relative_path.as_posix(),
                     "read_status": read_status,
                 })
+
+    # stable_image_id 历史上只绑定根内相对路径；多数据根出现同名相对路径时必须
+    # 在任何输出写入前拒绝，避免后续按 image_id 静默串联到另一批原图。
+    id_sources: dict[str, str] = {}
+    for row in rows:
+        source = f"{row['session_id']}/{row['relative_path']}"
+        previous = id_sources.get(row["image_id"])
+        if previous is not None:
+            raise ValueError(
+                "多个原图生成了相同 image_id，拒绝写出 manifest："
+                f"{row['image_id']} -> {previous!r}, {source!r}")
+        id_sources[row["image_id"]] = source
+
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # ---- 写 Manifest ----
     fieldnames = [
@@ -440,24 +452,39 @@ def scan_dataset(data_roots: list[Path], output_dir: Path, include_sha256: bool)
 
 
 def build_pilot_set(manifest_path: Path, out_dir: Path) -> None:
-    """从 manifest 生成 Pilot Set 清单（Anchor-only，labeled 照片）。
+    """从 manifest 生成已确认个体库清单（仅 labeled 照片）。
 
-    数据语义：高分目录数字子文件夹 = Anchor 代表照片组（**非个体 ID**）；
-    70-79 散图暂不处理。individual_id = {session}_{group_id} 仅作 Anchor 组标识。
+    数据语义：高分目录数字子文件夹 = 批次内已确认个体；70-79 散图暂不处理。
+    individual_id = {session}_{group_id}，通过 session 命名空间避免跨批次误合并，
+    但不表示已经建立跨时间的全局个体对应关系。
     """
-    # 以字符串读入 session_id，避免 "01" 被 pandas 解析为整数 1（路径会变成 1/...）
-    df = pd.read_csv(manifest_path, dtype={"session_id": str})
+    # 全部按字符串读取，避免源目录编号 "05" 漂移成浮点文本 "5.0"。
+    df = pd.read_csv(manifest_path, dtype=str, keep_default_na=False)
     df["session_id"] = df["session_id"].str.zfill(2)
+    # 连拍段必须在全量 manifest 上一次性生成；在 labeled/pool/gallery 子集上
+    # 重算会因缺少桥接帧而改变分段边界。
+    from whitewhale.data.sequence_groups import annotate_series
 
-    # 仅取已分组照片（高分目录子文件夹内的照片 = Anchor）
+    annotate_series(df)
+
+    # 仅取已分组照片（高分目录子文件夹内的照片 = 批次内已确认个体）
     anchors = df[df["label_status"] == "labeled"].copy()
     # 散图（loose_known）暂不纳入 Pilot（用户决定现阶段不处理散图）
 
     # 含根前缀的完整相对路径（相对数据根 src_dataset，含批次目录），供下游直接拼根读取
     anchors["relative_path"] = anchors["session_id"] + "/" + anchors["relative_path"]
 
-    # Anchor 组标识 = {session}_{group_id}（跨调查同名编号未合并，非全局 ID）
-    anchors["individual_id"] = anchors["session_id"] + "_" + anchors["group_id"].astype(str)
+    # scan 阶段的 label 直接来自源目录名，优先复用以保留前导零；兼容旧清单时再回退。
+    fallback = anchors["session_id"] + "_" + anchors["group_id"].astype(str).str.strip()
+    if "label" in anchors.columns:
+        source_label = anchors["label"].astype(str).str.strip()
+        anchors["individual_id"] = source_label.where(source_label != "", fallback)
+    else:
+        anchors["individual_id"] = fallback
+    if (anchors["individual_id"].str.endswith("_")
+            | (anchors["individual_id"].str.strip() == "")).any():
+        raise ValueError("labeled 行缺少可用的 label/group_id，无法生成稳定 individual_id")
+    anchors["confirmed_identity"] = anchors["individual_id"]
     anchors["split"] = "labeled"
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -471,15 +498,18 @@ def build_pilot_set(manifest_path: Path, out_dir: Path) -> None:
         "single_image_groups": int((anchors.groupby("individual_id").size() == 1).sum()),
         "multi_image_groups": int((anchors.groupby("individual_id").size() > 1).sum()),
         "max_images_per_group": int(anchors.groupby("individual_id").size().max()),
+        "n_full_series": int(anchors["series_id"].replace("", pd.NA).nunique()),
         "session_distribution": anchors["session_id"].value_counts().to_dict(),
         "quality_band_distribution": anchors["quality_band"].value_counts(dropna=False).to_dict(),
-        "note": "仅含高分目录子文件夹照片（Anchor）。散图（loose_known）暂不纳入。individual_id 是 Anchor 组标识，非已确认个体 ID。",
+        "identity_scope": "batch_local_confirmed",
+        "identity_id_schema": "source_label_preserving_v2",
+        "note": "仅含高分目录数字子文件夹中的批次内已确认个体照片；散图（loose_known）暂不纳入。individual_id 含 session 命名空间，不表示跨批次全局身份已对齐。",
     }
     stats_path = out_dir / "pilot_set_stats.json"
     with open(stats_path, "w", encoding="utf-8") as f:
         json.dump(stats, f, ensure_ascii=False, indent=2)
 
-    print(f"Pilot Set（Anchor）: {len(anchors)} 张 / {stats['n_anchor_groups']} 组")
+    print(f"Pilot Set（批次内已确认个体）: {len(anchors)} 张 / {stats['n_anchor_groups']} 个体")
     print(f"  单图组 {stats['single_image_groups']}，多图组 {stats['multi_image_groups']}，最多 {stats['max_images_per_group']} 张")
     print(f"  session: {stats['session_distribution']}")
     print(f"  输出: {pilot_path}")

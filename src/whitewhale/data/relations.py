@@ -35,20 +35,31 @@ def load_confirmed(confirmed_csv: Path) -> pd.DataFrame:
     """读人工确认个体表（仅 status=confirmed 且有确认身份的行）。"""
     if not confirmed_csv.exists():
         raise FileNotFoundError(f"确认个体表不存在：{confirmed_csv}")
-    df = pd.read_csv(confirmed_csv, dtype={"session_id": str,
-                                           "confirmed_identity": str})
+    columns = pd.read_csv(confirmed_csv, nrows=0).columns
+    identifier_columns = {
+        "image_id", "session_id", "confirmed_identity", "source_group", "status",
+    }
+    df = pd.read_csv(
+        confirmed_csv,
+        dtype={column: str for column in columns if column in identifier_columns},
+        keep_default_na=False)
     df = df[df["status"] == "confirmed"].copy()
     df = df[df["confirmed_identity"].notna()
             & (df["confirmed_identity"] != "")].copy()
+    required = {"image_id", "session_id", "source_group"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"确认个体表缺少追溯列: {sorted(missing)}")
+    image_ids = df["image_id"].astype(str)
+    if ((image_ids.str.strip() == "").any()
+            or image_ids.duplicated().any()):
+        raise ValueError("确认个体表 image_id 为空或重复")
+    sessions = df["session_id"].fillna("").astype(str).str.strip()
+    if (sessions == "").any():
+        raise ValueError("确认个体表存在空 session_id，无法建立批次内关系")
+    df["confirmed_identity"] = df["confirmed_identity"].astype(str).str.strip()
+    df["session_id"] = sessions
     return df
-
-
-def _pair_rows(ids: list[str], relation: str) -> pd.DataFrame:
-    """组内所有无序对（image_id_a < image_id_b 按字符串序去重）。"""
-    rows = [{"image_id_a": ids[i], "image_id_b": ids[j],
-             "relation": relation} for i in range(len(ids))
-            for j in range(i + 1, len(ids))]
-    return pd.DataFrame(rows, columns=RELATION_COLUMNS)
 
 
 def build_relations(confirmed_csv: Path,
@@ -59,21 +70,29 @@ def build_relations(confirmed_csv: Path,
 
     # ---- confirmed_same：同 confirmed_identity 内任意两两（整组已确认） ----
     parts = []
-    for identity, grp in confirmed.groupby("confirmed_identity", sort=False):
-        rows = _pair_rows(sorted(str(x) for x in grp["image_id"]),
-                          "confirmed_same")
-        if not rows.empty:
-            rows["individual_id"] = identity
-            # 追溯字段取该组首尾行（当前批内单 session/单组；跨 session
-            # 合并后应按对精确取值，见 relations_note.json）
-            rows["source_group_a"] = grp["source_group"].astype(str).iloc[0]
-            rows["source_group_b"] = grp["source_group"].astype(str).iloc[-1]
-            rows["session_id_a"] = grp["session_id"].astype(str).iloc[0]
-            rows["session_id_b"] = grp["session_id"].astype(str).iloc[-1]
-            parts.append(rows)
+    # identity 是不透明字符串；分组键直接用 (session, identity)，不靠前缀猜测。
+    for (_, identity), grp in confirmed.groupby(
+            ["session_id", "confirmed_identity"], sort=False):
+        ordered = grp.sort_values("image_id", kind="stable").reset_index(drop=True)
+        pair_rows = []
+        for i in range(len(ordered)):
+            for j in range(i + 1, len(ordered)):
+                left, right = ordered.iloc[i], ordered.iloc[j]
+                pair_rows.append({
+                    "image_id_a": str(left["image_id"]),
+                    "image_id_b": str(right["image_id"]),
+                    "relation": "confirmed_same",
+                    "individual_id": identity,
+                    "source_group_a": str(left["source_group"]),
+                    "source_group_b": str(right["source_group"]),
+                    "session_id_a": str(left["session_id"]),
+                    "session_id_b": str(right["session_id"]),
+                    "source": "confirmed_individuals.csv",
+                })
+        if pair_rows:
+            parts.append(pd.DataFrame(pair_rows, columns=RELATION_COLUMNS))
     same = pd.concat(parts, ignore_index=True) if parts else \
         pd.DataFrame(columns=RELATION_COLUMNS)
-    same["source"] = "confirmed_individuals.csv"
     same_path = out_dir / RELATION_FILES["confirmed_same"]
     same.to_csv(same_path, index=False, encoding="utf-8-sig")
 

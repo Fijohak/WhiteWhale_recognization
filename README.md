@@ -8,7 +8,7 @@
 |---|---|
 | 调查批次 | 一次野外调查、日期或航次 |
 | 拍摄序列 | 短时间内连续拍摄的一组照片（连拍）；训练/评估按序列划分，不拆分 |
-| Anchor（代表照片） | 高分目录数字子文件夹 = 历史挑选的个体代表照片，作检索查询；未经确认前不代表身份（非全局个体 ID） |
+| 批次内已确认个体 | 高分目录数字子文件夹中的 `individual_id`；身份在该调查批次内已确认，但不是跨批次全局 ID |
 | Unresolved Image Pool | `70-79` 散图 = 未归属照片池，作检索 Gallery |
 | 候选分组 | 原数据中人工或程序初步整理出的图片集合（Candidate Cluster） |
 | Candidate ≠ Confirmed | 聚类簇、检索结果都只是候选；人工审核（确认/不确定/拒绝）后才是个体身份 |
@@ -16,7 +16,7 @@
 | 图像质量 | 图像清晰度、目标大小或人工评分（`70-79` / `80 and above` 等评分区间） |
 | 关系备注 | 文件夹名称中记录的候选关联信息 |
 | 批内（同一天） | 封闭集归档：检测 → 聚类 → 每簇选代表图 → 人工审核归档 |
-| 跨时间（不同批次） | 开放集匹配：新批次与历史个体库匹配，低于阈值标记"疑似新个体"；结果仅作候选 |
+| 跨时间（不同批次） | 开放集匹配：新批次与历史个体库匹配，低于未校准阈值标记"疑似新个体"；结果仅作候选，不能自动确认身份 |
 | 左右侧分离 | 背鳍两侧特征不同，照片记录朝向（left/right/unknown），左右侧分别比较 |
 | 原始数据只读 | 原图在 `src_dataset/` 只读；所有生成物写 `outputs/`，可追溯到原始路径 |
 
@@ -33,10 +33,10 @@
 ```text
 src_dataset/20140806 01（示例批次，历史库；调查 20140417W01，地点代码 SZi，批次 01）
 ├── 70-79/                      # 70-79 分组
-│   ├── 05/ 11/ 12/ 13/ 14/ …   # 数字子文件夹 = 代表照片 Anchor（组名非全局 ID）
+│   ├── 05/ 11/ 12/ 13/ 14/ …   # 数字子文件夹 = 批次内已确认个体（非全局 ID）
 │   └── *.JPG                   # 散图，Unresolved Image Pool（人工跟进中）
 ├── 80 and above/               # 80 分及以上
-│   └── 01/ … 10/               # 数字子文件夹 = 代表照片 Anchor
+│   └── 01/ … 10/               # 数字子文件夹 = 批次内已确认个体
 ├── 50-59/ 60-69/ below 50/     # 低于 70 分，暂不用于训练
 ├── MO/  miscellaneous/  nn relationship/   # 拍摄者 / 其他目录
 ├── 20140417W01.txt             # 调查记录
@@ -62,7 +62,7 @@ src_dataset/20140806 01（示例批次，历史库；调查 20140417W01，地点
 * **评分区间 = 图片分级**：W01 txt 计数（50-59:14, 60-69:100, 70-79:64, 80+:28）与批次目录图片数逐项一致；
 * **MO / RAY / DEREK = 拍摄者代码**：txt 人员计数明确；
 * **文件名双模式**：RAY 拍摄 `0145_20140417_SZi_01_RAY_0632.JPG`（编号_日期_地点_批次_人员_连拍号）；MO 拍摄 `RES20001.JPG`（无日期字段）；
-* **01 = W01（SZi），03 = W03（HBi）**，同一天两群；01 与 03 是两个独立海豚群，分组编号在群内各自独立（01_02 与 03_02 不是同一只），跨群照片默认视为不同个体，除非未来人工确认；
+* **01 = W01（SZi），03 = W03（HBi）**，同一天两个调查批次；两批的分组编号各自独立。`01_02` 与 `03_02` 只表示两个批次内 ID，是否对应同一真实个体尚未对齐；跨批次照片既不能默认同体，也不能默认异体；
 * **`nn relationship` 目录 = 疑似亲缘关系个体样本**（2026-08-19 数据提供方确认，**非每个批次必有**）：一图两鳍（同框多头），不参与个体分组，scan_dataset 标记 relation_note=nn_relationship；亲缘关系仍需人工确认（同框 ≠ 有亲缘）。
 
 ### 2.4 待确认假设（A1–A13）
@@ -72,9 +72,9 @@ src_dataset/20140806 01（示例批次，历史库；调查 20140417W01，地点
 | A1 | 评分区间为质量/匹配置信度分级 | 基本证实（W01 计数一致） |
 | A2 | MO/RAY/DEREK 为拍摄者代码 | 已证实 |
 | A3 | SZi/HBi 为调查地点代码 | 推测 |
-| A4 | 80 and above 数字分组为代表照片（Anchor）而非个体 ID | 已确认（历史整理方式） |
+| A4 | 70-79 / 80 and above 数字分组为批次内已确认个体，但编号不是跨批次全局 ID | 已确认（数据提供方） |
 | A5 | `sj of 01` = 伴随/相关个体关系 | 推测 |
-| A6 | `nn relationship` = 相邻关系候选组 | 推测（txt 字段为空） |
+| A6 | `nn relationship` = 疑似亲缘关系个体样本目录；同框是否确有亲缘仍待人工确认 | 目录语义已确认，具体关系待核验 |
 | A7 | processed / Processed 2 为不同批次 | 推测（SHA256 无重叠） |
 | A8 | txt 计数为全量，目录为整理后子集 | 推测 |
 | A9 | 文件名连拍号 = 连续拍摄序列 | 推测，须抽样核验后用于划分 |
@@ -90,13 +90,13 @@ src_dataset/20140806 01（示例批次，历史库；调查 20140417W01，地点
 
 > 概念定义见 §1 核心语义表。
 
-* 当前使用全部 9 个批次的 `70-79`、`80 and above` 两个区间（≥70 分）数据；历史库（gallery）= 20140806 01/03 的 labeled（43 组 202 张，Candidate 级）；
-* 这两个区间下的数字子文件夹 = 历史挑选的代表照片（Anchor），不代表全局个体 ID，可作 Anchor 检索的查询集，不可直接作监督标签；
-* 每个 Anchor 基本只有一张照片（极少数含连拍多帧），属于极端少样本的个体识别问题；
-* 单图 Anchor 可视为该个体的**质量上界先验**（高分分段挑选出的代表照片，模糊图进不了该分段），散图收集时可作质量参照（先验非事实，使用须标注）；
+* 当前使用全部 9 个批次的 `70-79`、`80 and above` 两个区间（≥70 分）数据；历史库（gallery）= 20140806 01/03 的批次内已确认个体（43 个体、202 张）；
+* 这两个区间下的数字子文件夹是批次内已确认个体，可用作监督标签；`individual_id={session}_{group_id}` 通过 session 隔离同名编号，不代表跨批次身份已经对齐；
+* 多图个体常来自同一次连拍或相邻时段，时间间隔短。训练和评估必须整串隔离；即使指标良好，也只能说明短期批内辨识能力，不能外推为跨年能力；
+* 高分照片可作为该个体的**质量上界先验**（模糊图较难进入高分段），散图收集时可作质量参照（先验非事实，使用须标注）；
 * 散图（322 张 loose_known）属于 Unresolved Image Pool：同调查内可能属于某个已选代表照片的个体，但具体归属未确认，只能作为检索 Gallery 的候选，不可作标签；
 * 分组编号只在同一调查内有效，跨调查同名编号是否对应同一只海豚需人工核验（当前跨调查对应关系尚未核验）；
-* 背鳍有左右两面，但当前每个个体只有一张照片、尚无双侧样本；照片仍须记录朝向（left / right / unknown），左右侧分别比较。
+* 背鳍有左右两面，现有多图个体仍以短时连拍为主，双侧与长时间跨度覆盖不足；照片须记录朝向（left / right / unknown），左右侧分别比较。
 
 ### 2.6 任务定位与数据语义（2026-08-17 与数据提供方对齐）
 
@@ -119,7 +119,7 @@ src_dataset/20140806 01（示例批次，历史库；调查 20140417W01，地点
 ### 2.7 数据使用原则
 
 * **原始数据只读**：所有清洗、裁剪、重命名和整理结果保存在独立目录中，避免破坏原始材料；
-* **分层信任目录标签**：数字子文件夹（Anchor）未经人工核验前不代表个体身份，不可作监督分类标签；分组编号只在同调查内成立；`70-79` 散图仅作检索 Gallery；低于 70 分的区间及 `MO`/`RAY`/`DEREK`/`miscellaneous`/`nn relationship` 等目录暂不用于个体标签；
+* **分层信任目录标签**：数字子文件夹中的 `individual_id` 是批次内已确认个体，可作批内监督标签；分组编号只在同调查内成立，跨批次同名编号不得自动合并；`70-79` 散图归属未定；低于 70 分的区间及 `MO`/`RAY`/`DEREK`/`miscellaneous`/`nn relationship` 等目录暂不用于个体标签；
 * **避免重复数据**：数据索引阶段进行文件哈希或图像相似度检查，避免重复统计和重复训练；
 * **可追溯**：每张处理后的图片都能追溯到原始文件路径、调查日期、拍摄批次、连续拍摄序列、原始候选分组、图像质量区间、处理方式、人工核验状态。
 
@@ -141,8 +141,14 @@ src_dataset/20140806 01（示例批次，历史库；调查 20140417W01，地点
 ```bash
 python scripts/prepare_data.py scan                # 扫描 configs/pipeline.yaml 的 data_roots
 python scripts/prepare_data.py scan --sha256      # 附加 SHA-256 完全重复检测
-python scripts/prepare_data.py build-pilot        # 由 manifest 生成 pilot_set.csv（高分 Anchor 照片表）
+python scripts/prepare_data.py build-pilot        # 由 manifest 生成批次内已确认个体库
 ```
+
+`build-pilot` 使用保留来源标签的 `source_label_preserving_v2` ID 规则，例如来源目录 `05` 保持为
+`20140806 01_05`，不再经数值解析变成 `5.0`。2026-08-29 的一次性迁移映射和
+旧表备份分别保存在 `outputs/pilot/individual_id_migration_v1_to_v2.csv` 与
+`outputs/pilot/pilot_set_legacy_ids_20260829.csv`；历史审核包里的旧 ID 须经映射表解析，
+不得按字符串直接与当前 ID 拼接。
 
 ### 4.2 批内归档管线 `scripts/run_pipeline.py`
 
@@ -152,34 +158,44 @@ python scripts/prepare_data.py build-pilot        # 由 manifest 生成 pilot_se
 # 散图池验证模式（复用已预提取的池特征产物）
 python scripts/run_pipeline.py --pool
 
-# 任意新批次（输入 manifest）
+# 从全量 manifest 中明确选择一个新批次
 python scripts/run_pipeline.py --input-manifest outputs/index/dataset_manifest.csv \
-    --batch-name "20240419 02" --sheets
+    --session "20140419 02" --batch-name "20140419 02" --sheets
 ```
 
 | 关键参数 | 默认 | 说明 |
 |---|---|---|
 | `--pool` / `--input-manifest` | 二选一必填 | 散图池验证 / 新批次清单 |
-| `--gallery-embeddings` | `outputs/embeddings/embeddings_metric_r4_yolocrop_v2.npy` | 历史个体库特征（r4 + YOLO 裁剪） |
-| `--threshold-cluster` | 0.58 | 簇级匹配阈值（E5 标定 FA≤5%，语义"宁可多标疑似"） |
-| `--threshold-image` | 0.50 | 单图投票阈值下限（E4 标定） |
+| `--session` | 多批次 manifest 时必填 | 只处理指定 `session_id`，禁止把全量清单静默当成一个批次 |
+| `--gallery-embeddings` | `outputs/artifacts/r4_yolocrop_v3/gallery/embeddings.npy` | 当前活动历史个体库特征（r4 + YOLO 裁剪，严格 provenance） |
+| `--threshold-cluster` | 0.58 | 簇级候选阈值（provisional，历史 E5 参考值，未完成当前开放集校准） |
+| `--threshold-image` | 0.50 | 单图候选阈值（provisional；旧 E4 跨批次负例假设无效，不能据此解释 FA） |
 | `--out` | `outputs/cluster_archival` | 输出目录（内部按 batch_name 分目录） |
 | `--sheets` | 关 | 生成候选簇拼图 |
 
 ### 4.3 人工审核网页 `scripts/launch_review.py`
 
-审核批内归档候选簇：逐簇确认（confirmed）/ 不确定（uncertain）/ 拒绝（reject），记录审核人与时间，可追溯。
+审核批内归档候选簇：逐簇确认（confirmed）/ 不确定（uncertain）/ 拒绝（reject）。
+多人模式按 `image_id + reviewer` 保存独立原始票，网页只显示当前审核人的判断；
+正式导出默认至少 3 人且必须完全一致，人数不足或任意分歧均不进入确认库。
 
 ```bash
-python scripts/launch_review.py                          # 打开审核页（http://127.0.0.1:8001）
-python scripts/launch_review.py --export                 # 导出审核结果（confirmed 个体表）后退出
+python scripts/launch_review.py --clusters "outputs/cluster_archival/20140419 02/clusters.csv" \
+    --reviewer reviewer_a --port 8001
+python scripts/launch_review.py --clusters "outputs/cluster_archival/20140419 02/clusters.csv" \
+    --reviewer reviewer_b --port 8002
+python scripts/launch_review.py --clusters "outputs/cluster_archival/20140419 02/clusters.csv" \
+    --reviewer reviewer_c --port 8003
+python scripts/launch_review.py --clusters "outputs/cluster_archival/20140419 02/clusters.csv" \
+    --export --min-reviewers 3
 ```
 
-审核结果在 `outputs/review/`（annotations.csv + confirmed_individuals.csv）。
+审核结果在 `outputs/review/`（`review_annotations.csv` 原始票、
+`review_vote_summary.csv` 裁决证据、`confirmed_individuals.csv` 一致确认结果）。
 
 ### 4.4 个体查询客户端 `scripts/launch_query.py`
 
-上传一张背鳍照片 → YOLO 检测裁剪（未检出回退整图）→ r4 特征 → 全库 Top-K 检索，输出三态判定：
+上传一张背鳍照片 → YOLO 检测裁剪（未检出回退整图）→ r4 特征 → 全库 Top-K 检索，输出二态候选提示：
 
 - `known`：最高相似度 ≥ 阈值，展示 Top-K 候选（仍需人工核验）；
 - `unknown`：最高相似度 < 阈值，提示"疑似未知个体（可能新个体）"，仍返回 Top-K 供参考。
@@ -188,27 +204,61 @@ python scripts/launch_review.py --export                 # 导出审核结果（
 python scripts/launch_query.py                    # http://127.0.0.1:8000
 ```
 
-可双击 `start_query_app.bat` 一键启动。默认阈值 0.55（E4 标定 FA≤5% 区间中值）。查询模型必须与 gallery 特征同模型（读取 embedding 旁 config 自动匹配，显式指定时校验拒绝跨模型）。
+可双击 `start_query_app.bat` 一键启动。默认阈值 0.55 的状态为
+`provisional_unvalidated`：旧 E4 跨批次负例假设无效，因此该值不能解释为已校准的
+错误接受率。正式使用前必须用当前模型、裁剪方式和独立确认集重新标定。查询端会校验
+embedding、meta 与权重的 SHA-256，并要求查询模型和 gallery config 的模型、裁剪、
+预处理及 checkpoint 哈希一致；缺少 provenance 或跨版本混用会直接拒绝启动。
 
 ### 4.5 特征训练 `scripts/train_reid.py`
 
-用人工确认的伪标签训练特征模型（ArcFace 度量学习两阶段：冻结 backbone 训 head → 解冻微调）：
+用批次内已确认的个体标签训练特征模型（ArcFace 度量学习两阶段：冻结 backbone 训 head → 解冻微调）：
 
 ```bash
-python scripts/train_reid.py --out outputs/metric_learning/r4      # r4 重训（E5.2：individual_id 标签，正式特征源）
-python scripts/train_reid.py --no-hard-negative       # r1/r2 历史链路（纯 ArcFace CE）
-python scripts/train_reid.py --extract                # 训练后重新提取特征
+python scripts/train_reid.py --out outputs/metric_learning/r6_candidate \
+    --test-session "20140419 02" --extract
+python scripts/train_reid.py --out outputs/metric_learning/r6_ce \
+    --test-session "20140419 02" --no-hard-negative
 ```
+
+`--out` 必须显式指定新版本目录；目录已有 `best.pt/history.csv/metrics.json` 时默认
+拒绝覆盖。只有明确要复跑同版本才使用高风险参数 `--overwrite`。候选模型完成独立评估
+前不要修改生产 `reid_checkpoint`；当前生产模型仍是 r4。
+
+`r5_candidate` 是一次协议纠正后的历史候选，但其训练缓存缩放和 Triplet 的整串
+身份排除仍有缺口，因此不能作为最终纠正版本。`r6_candidate` 补齐这两项：训练缓存
+等比缩放至短边 256，且某身份只要曾与 anchor 同串共现，就不能作为该 anchor 的
+Triplet 负类；`20140419 02` 整个 session（46 张 / 7 个体）也被独立留出，不参与
+训练或 checkpoint 选择。
+
+r6 的小验证集 best R@1 为 0.953（43 个有效 query，stage 2 epoch 19），独立测试
+R@1 为 0.500（预训练基线 0.478）；两者只用于训练诊断，不能代替固定全量评估。在
+75 个批次内身份的同协议全量跨串评估（97 query / 255 gallery）中，r4/r5/r6 的
+R@1/mAP 分别为 **0.567/0.707**、0.412/0.580、0.454/0.636。E5 使用 session-local
+候选集并逐 query 排除完整同串：保守口径的簇级 R@1 / MRR@10 分别为 r4 0.581/0.710、
+r5 0.488/0.616、r6 0.558/0.687；串抽样口径为 r4 0.628/0.719、r5 0.395/0.553、
+r6 0.512/0.639。r6 比 r5 有所回升，但仍未超过 r4，因此生产模型不切换。旧跨
+session E5 数字无效，且单真值簇的 reciprocal-rank 指标应称 MRR@10，不是 mAP。
+所有评估仍是当前短时间间隔内的批次内跨串评估，不构成跨月或跨年结论。详见
+[EXPERIMENT_LOG.md](EXPERIMENT_LOG.md) 的 r5/r6 实跑记录。
 
 ### 4.6 评估 `scripts/evaluate.py`
 
-在已提取特征上评估检索指标（个体级 R@1 / mAP）或对级相似度分布（FA5% 阈值建议）：
+在已提取特征上评估批次内跨串检索指标（R@1 / mAP），或生成批次内同/异体
+相似度诊断。两种模式都剔除完整同串；跨批次身份未对齐，不进入正式正负例：
 
 ```bash
-python scripts/evaluate.py --embeddings outputs/embeddings/embeddings_metric_r4_yolocrop_v2.npy \
-    --meta outputs/embeddings/embeddings_metric_r4_yolocrop_v2_meta.csv --mode retrieval
-python scripts/evaluate.py --mode pairs   # 同/跨个体余弦分布 + 阈值建议
+python scripts/evaluate.py --embeddings outputs/artifacts/r4_yolocrop_v3/gallery/embeddings.npy \
+    --meta outputs/artifacts/r4_yolocrop_v3/gallery/embeddings_meta.csv \
+    --mode retrieval --out outputs/verification/r4_yolocrop_v3
+python scripts/evaluate.py --embeddings outputs/artifacts/r4_yolocrop_v3/gallery/embeddings.npy \
+    --meta outputs/artifacts/r4_yolocrop_v3/gallery/embeddings_meta.csv \
+    --mode pairs --out outputs/verification/r4_yolocrop_v3
 ```
+
+`pairs` 只报告诊断分布（`diagnostic_only_not_open_set_calibration`），不能据此给出
+开放集 FA 或生产阈值；正式阈值需要跨批次人工对齐后的 confirmed same/different/unknown
+独立标定集。
 
 ### 4.7 跨时间批次驱动 `scripts/run_cross_time_batch.py`
 
@@ -217,8 +267,12 @@ python scripts/evaluate.py --mode pairs   # 同/跨个体余弦分布 + 阈值�
 ```bash
 python scripts/run_cross_time_batch.py                       # 全流程（7 个新批次，E7 验证）
 python scripts/run_cross_time_batch.py --sessions "20140419 02"   # 只跑指定批次
-python scripts/run_cross_time_batch.py --only-gallery        # 只构建历史库特征
+python scripts/run_cross_time_batch.py --only-gallery        # 只读严格校验当前历史库
 ```
+
+该入口禁止原地重建或覆盖活动 gallery。需要重建时，使用
+`scripts/rebuild_r4_artifacts.py --out outputs/artifacts/<新版本目录>` 先发布不可覆盖的新版本，
+再显式修改 `configs/pipeline.yaml` 切换活动产物。
 
 ### 4.8 其他工具
 
@@ -257,7 +311,7 @@ WhiteWhale_recognization/
 │   ├── run_pipeline.py        #   2. 批内归档管线（检测→聚类→子簇→匹配→审核材料）
 │   ├── launch_review.py       #   3. 人工审核网页（:8001）
 │   ├── launch_query.py        #   4. 个体查询客户端（:8000）
-│   ├── train_reid.py          #   5. 特征训练（r3/r4 共入口，正式特征源 = r4）
+│   ├── train_reid.py          #   5. 特征训练（r6 候选已实跑，正式特征源仍为 r4）
 │   ├── evaluate.py            #   6. 检索指标 / 对级分布评估
 │   ├── run_cross_time_batch.py#   7. 跨时间批次驱动
 │   ├── finalize_history_verify.py#  8. 历史库核验回填（3.6 步骤4 自动化）
@@ -281,7 +335,7 @@ WhiteWhale_recognization/
 ├── configs/                   # 统一配置：pipeline.yaml / reid.yaml / detector.yaml
 ├── docs/                      # 操作手册（历史库核验与跨年匹配重建）
 ├── experiments/               # 一次性科研实验（benchmark/评估预演；可追溯，不参与正式流程）
-├── tests/                     # pytest 接口测试（43 个，见 §7）
+├── tests/                     # pytest 回归测试（见 §7）
 ├── outputs/                   # 生成物（不入库，可重新生成）
 │   ├── embeddings/            #   特征库（*.npy + meta.csv + config.json）
 │   ├── cluster_archival/      #   归档管线产物（每批次一个子目录：clusters/ 代表图/ 拼图）
@@ -299,7 +353,7 @@ WhiteWhale_recognization/
 python -m pytest tests/ -v
 ```
 
-覆盖：检索指标（R@k/mAP）、query/gallery 划分防泄漏、拼图输出、审核数据可追溯、查询三态判定与模型匹配防护、yaml 配置加载、数据工具（3.6 回填/1.9 分串/3.2 划分/3.3 关系表）。
+覆盖：检索指标（R@k/mAP）、query/gallery 划分防泄漏、拼图输出、审核数据可追溯、查询二态提示与模型匹配防护、yaml 配置加载、数据工具（3.6 回填/1.9 分串/3.2 划分/3.3 关系表）。
 
 ## 8. 待办（当前）
 
@@ -321,9 +375,9 @@ python -m pytest tests/ -v
 | 3.2 | 建立人工评估集（多个体 × 多日期 × 多角度，按 Sequence 划分）——**自动划分脚本已就绪 `scripts/build_eval_set.py`**（真实数据草案：123 张 / 28 个体，query 28 / gallery 95，同序列不拆分），草案待人工确认 | [ ] |
 | 3.3 | 建立确认关系表（confirmed_same / confirmed_different / possibly_same）——**表结构与导出代码已就绪 `scripts/export_relations.py`**（confirmed_same 有数据，另两张空表结构 + 数据源说明） | [ ] |
 | 3.4 | 确定可接受错误合并率（优先控制错误合并风险，种群统计低估） | [ ] 科研决策 |
-| 3.5 | Pilot 人工确认集（~20-30 个 Anchor 的同个体照片 2-4 张） | [ ] |
-| 3.6 | 历史库核验：20140806 43 组 202 张 Candidate 级标签人工核验（包已就绪：batches_history/history_verify.csv，202/202 带特征辅助）——**操作手册见 [docs/history_verify_crossyear.md](docs/history_verify_crossyear.md) §一**；**核验回填脚本已就绪 `scripts/finalize_history_verify.py`**（汇总表 → 可信基准 + pilot_set 置 verified，含自洽校验与组名防错） | [ ] 组员执行 |
-| 3.7 | 6 张撤回照片多人复核投票重审（E9 撤回；关键判定须多人独立标注 + 投票裁决）——**操作手册见 [docs/history_verify_crossyear.md](docs/history_verify_crossyear.md) §二**（6 张照片清单与流程已写明） | [ ] 组员执行（依赖 6.11 工具） |
+| 3.5 | Pilot 独立核验集（~20-30 个体，每个体选 2-4 张不同序列/时段照片） | [ ] |
+| 3.6 | 历史库二次一致性核验：20140806 的 43 个批次内已确认个体、202 张照片，复核组内异常及形成独立可信基准（包已就绪：batches_history/history_verify.csv，202/202 带特征辅助）——**操作手册见 [docs/history_verify_crossyear.md](docs/history_verify_crossyear.md) §一**；**核验回填脚本已就绪 `scripts/finalize_history_verify.py`**（汇总表 → 可信基准 + pilot_set 置 verified，含自洽校验与组名防错） | [ ] 组员执行 |
+| 3.7 | 6 张撤回照片多人复核投票重审（E9 撤回；关键判定须至少 3 人独立标注、完全一致才确认）——**6.11 工具已完成**，操作手册见 [docs/history_verify_crossyear.md](docs/history_verify_crossyear.md) §二 | [ ] 组员执行 |
 | 3.8 | 跨年匹配重建（依赖 3.6 + 3.7 通过后）——**操作手册见 [docs/history_verify_crossyear.md](docs/history_verify_crossyear.md) §三**（前置条件/命令/审核/成功标准已写明） | [ ] |
 
 **自监督与轮廓特征**
@@ -336,12 +390,12 @@ python -m pytest tests/ -v
 | 4.4 | 特征对比——轮廓 vs 外观已测（E10：轮廓 R@1 0.087 vs 外观 0.728）；融合待做（依赖分割改善） | [ ] |
 | 4.5 | 特征可视化与错误分析——E10 完成基础版（外观 R@1 失败 50/184，分散 19 个个体，无集中病灶）；可视化报告待完善 | [~] |
 
-**伪标签与度量学习**
+**确认标签与度量学习**
 
 | # | 任务 | 状态 |
 |---|---|---|
-| 5.1 | 生成伪标签（仅高可信确认簇，独立版本化；当前为 Candidate 级初审标签） | [~] |
-| 5.2 | 度量学习训练（ArcFace / Triplet / 对比学习）——**r4 重训完成（E5.2，2026-08-25）**：individual_id 作标签（候选级），训练/评估个体彻底隔离，保守口径新批次 R@1 0.238→0.381（+14.3pp）；**生产 `reid_checkpoint` 已切换 r4（2026-08-26）**；Triplet 其余变体未试 | [~] |
+| 5.1 | 将模型候选簇经人工审核转为补充训练标签（只纳入 confirmed，独立版本化；不得把候选结果直接当标签） | [~] |
+| 5.2 | 度量学习训练（ArcFace + 修正 batch-hard）——r6 补齐 r5 的等比缓存与整串共现身份排除，并以 `20140419 02` 为独立测试；小验证集 0.953、独立测试 0.500 不能替代固定全量结论。全量同协议图级 R@1/mAP：r4 0.567/0.707，r5 0.412/0.580，r6 0.454/0.636。E5 session-local 的 r6 两种簇级 R@1/MRR@10 为 0.558/0.687、0.512/0.639，仍低于 r4；生产继续使用 r4，短间隔数据不能外推跨年 | [~] |
 | 5.4 | 难例主动审核（低置信边界样本） | [ ] |
 
 **自动化系统**
@@ -350,7 +404,6 @@ python -m pytest tests/ -v
 |---|---|---|
 | 6.2 | 自动判断左右侧与质量：质量判定规则已用（E9：未检出背鳍 / det_conf<0.3 / Laplacian 方差<p10）；模型化与左右侧判断未做 | [~] |
 | 6.10 | 多头同框检测（NN relationship 候选 + 多归属归档）：YOLO 取全部框 + IoU 去重；**语义红线：同框多头 ≠ 亲缘关系**，只能标记疑似供人工判断 | [ ] |
-| 6.11 | 审核网页支持多人复核投票：多审核人独立标注 + 汇总投票裁决（配合 3.7） | [ ] 组员开发 |
 
 **文档与工程基建**
 

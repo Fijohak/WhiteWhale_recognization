@@ -32,6 +32,8 @@ import pandas as pd
 RAY_NAME_PATTERN = re.compile(r"^(\d+)_(.+)_(\d+)$")
 # 连拍号间隔超过此值视为新串（容忍中间删 1 帧）
 MAX_GAP = 2
+NO_FRAME = 999999
+NO_SERIES = ""
 # 连拍串清单统一列（空结果也输出表头，保证下游可读）
 SEQ_COLUMNS = ["sequence_id", "session_id", "n_frames", "image_ids",
                "filenames", "frame_numbers", "candidate_groups",
@@ -58,6 +60,68 @@ def parse_ray_frame(filename: str) -> tuple[str, int] | None:
     if not match:
         return None
     return match.group(2), int(match.group(3))
+
+
+def annotate_series(df: pd.DataFrame, session_col: str = "session_id",
+                    filename_col: str = "filename") -> pd.DataFrame:
+    """按完整 session、文件名序列键和连续帧段写入 ``series_id``。
+
+    相邻帧号差不超过 ``MAX_GAP`` 的记录通过传递闭包归为同串；不同 session
+    或不同序列键永不合并。无法解析 RAY 连拍号的照片保留空 ``series_id``，
+    由调用方按场景选择“独立照片”或“只进 gallery”的保守处理。
+    函数原地补列并返回同一个 DataFrame，便于正式流程与实验共用。
+    """
+    if session_col not in df.columns:
+        raise ValueError(f"缺少 session 列: {session_col}")
+    if filename_col not in df.columns:
+        if "relative_path" not in df.columns:
+            raise ValueError(
+                f"缺少 {filename_col}，且没有 relative_path 可用于提取文件名")
+        df[filename_col] = df["relative_path"].map(
+            lambda value: Path(str(value)).name)
+
+    parsed = df[filename_col].map(parse_ray_frame)
+    df["sequence_key"] = parsed.map(lambda value: value[0] if value else NO_SERIES)
+    df["frame"] = parsed.map(lambda value: value[1] if value else NO_FRAME)
+    df["series_id"] = NO_SERIES
+
+    valid = df["sequence_key"] != NO_SERIES
+    for (session, key), group in df[valid].groupby(
+            [session_col, "sequence_key"], sort=False):
+        ordered = group.sort_values("frame", kind="stable")
+        chunk_indices: list = []
+        previous_frame: int | None = None
+        for row_index, frame in zip(ordered.index, ordered["frame"].astype(int)):
+            if previous_frame is not None and frame - previous_frame > MAX_GAP:
+                _write_series_chunk(df, chunk_indices, session, key)
+                chunk_indices = []
+            chunk_indices.append(row_index)
+            previous_frame = frame
+        _write_series_chunk(df, chunk_indices, session, key)
+    return df
+
+
+def _write_series_chunk(df: pd.DataFrame, indices: list,
+                        session: object, key: str) -> None:
+    """把一个连续帧段写成稳定、可追溯的完整串标识。"""
+    if not indices:
+        return
+    frames = df.loc[indices, "frame"].astype(int)
+    series_id = f"{session}|{key}#{frames.min():04d}-{frames.max():04d}"
+    df.loc[indices, "series_id"] = series_id
+
+
+def series_units(df: pd.DataFrame, image_id_col: str = "image_id") -> pd.Series:
+    """返回划分单元；可解析照片按完整串，不可解析照片各自独立。"""
+    if "series_id" not in df.columns:
+        raise ValueError("缺少 series_id，请先调用 annotate_series")
+    if image_id_col in df.columns:
+        singles = "__single_" + df[image_id_col].astype(str)
+    else:
+        singles = pd.Series(
+            [f"__single_{index}" for index in df.index], index=df.index)
+    series = df["series_id"].fillna("").astype(str)
+    return series.where(series.str.strip() != "", singles)
 
 
 def split_by_gap(frames: list[int], max_gap: int = MAX_GAP) -> list[list[int]]:

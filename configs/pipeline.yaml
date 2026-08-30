@@ -16,6 +16,11 @@ output_root: outputs
 detector_checkpoint: models/detectors/yolov8n_dorsalfin.pt   # YOLO 背鳍检测器（E1）
 reid_checkpoint: outputs/metric_learning/r4/best.pt          # r4 微调权重（E5.2 individual_id 重训，正式特征源）
 
+detector:                                      # 正式管线/查询的检测推理参数
+  conf: 0.25
+  imgsz: 1024
+  device: auto                                 # 有 GPU 时使用 GPU，否则回退 CPU
+
 crop:                                          # 检测框非均匀扩展（E2 标定）
   pad_x: 0.30
   pad_up: 0.15
@@ -26,8 +31,8 @@ clustering:                                    # HDBSCAN 候选聚类（批内�
   subcluster_min_size: 4
 
 retrieval:                                     # 簇级多帧投票匹配（实验标定参考值）
-  threshold_cluster: 0.58                      # E5 簇级 FA≤5%
-  threshold_image: 0.50                        # E4 单图区间下限
+  threshold_cluster: 0.58                      # 历史 E5 参考值；当前模型/独立集需重标定
+  threshold_image: 0.50                        # 历史 E4 参考值；当前模型/独立集需重标定
   topk: 3
 
 review:                                        # launch_review
@@ -35,10 +40,24 @@ review:                                        # launch_review
   host: 127.0.0.1
 
 query:                                         # launch_query（gallery = r4+YOLO 裁剪特征）
-  embeddings: embeddings/embeddings_metric_r4_yolocrop_v2.npy
-  meta: embeddings/embeddings_metric_r4_yolocrop_v2_meta.csv
+  embeddings: artifacts/r4_yolocrop_v3/gallery/embeddings.npy
+  meta: artifacts/r4_yolocrop_v3/gallery/embeddings_meta.csv
   pilot: pilot/pilot_set.csv
-  threshold: 0.55                              # 三态判定（E4 标定 FA≤5% 区间中值）
+  threshold: 0.55                              # known/unknown 二态提示；历史 E4 参考值，需重标定
   k: 10
   port: 8000
   host: 127.0.0.1
+
+pool:                                          # 已按同一生成链路重建的散图池产物
+  embeddings: artifacts/r4_yolocrop_v3/pool/embeddings.npy
+  meta: artifacts/r4_yolocrop_v3/pool/embeddings_meta.csv
+  crops: artifacts/r4_yolocrop_v3/pool/crops
+
+cross_time:                                    # run_cross_time_batch
+  gallery_sessions:
+    - 20140806 01
+    - 20140806 03
+  out_dir: cluster_archival/cross_time
+  gallery_crops: artifacts/r4_yolocrop_v3/gallery/crops
+  sheets: true
+  max_sheets: 200

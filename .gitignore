@@ -47,5 +47,8 @@ external/
 
 src_dataset/
 
+# 临时实验产物（研究�料]DF、证是CSV、打图等，不入库�?
+tmp/
+
 datas/
 .serena/
