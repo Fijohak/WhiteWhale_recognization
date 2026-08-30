@@ -165,6 +165,8 @@ class TestPostgresLeaseConcurrency(unittest.TestCase):
             "candidate_clusters", "candidate_cluster_members",
             "candidate_events", "review_tasks", "review_events",
             "reviewer_rosters", "review_consensus", "review_conflicts",
+            "confirmed_individuals", "individual_aliases", "observations",
+            "identity_events",
         }.issubset(tables))
         command.check(config)
 

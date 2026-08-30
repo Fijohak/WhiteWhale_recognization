@@ -502,3 +502,54 @@ class ReviewConflict(Base):
     detail: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ConfirmedIndividual(TimestampMixin, Base):
+    __tablename__ = "confirmed_individuals"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    display_name: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    state: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
+    flags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+
+
+class IndividualAlias(TimestampMixin, Base):
+    __tablename__ = "individual_aliases"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    individual_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("confirmed_individuals.id", ondelete="CASCADE"),
+        nullable=False)
+    alias: Mapped[str] = mapped_column(String(256), nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    __table_args__ = (
+        UniqueConstraint("individual_id", "alias", "source"),
+    )
+
+
+class Observation(TimestampMixin, Base):
+    __tablename__ = "observations"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    individual_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("confirmed_individuals.id", ondelete="RESTRICT"),
+        nullable=False)
+    crop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("crops.id", ondelete="RESTRICT"), unique=True, nullable=False)
+    side: Mapped[str] = mapped_column(String(16), default="unknown", nullable=False)
+    quality: Mapped[float | None] = mapped_column(Float)
+    observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source_review_task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("review_tasks.id", ondelete="RESTRICT"), nullable=False)
+
+
+class IdentityEvent(Base):
+    __tablename__ = "identity_events"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    individual_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("confirmed_individuals.id", ondelete="RESTRICT"),
+        nullable=False)
+    review_task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("review_tasks.id", ondelete="RESTRICT"),
+        unique=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
