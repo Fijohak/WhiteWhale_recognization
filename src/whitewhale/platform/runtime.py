@@ -16,6 +16,7 @@ from sqlalchemy.orm import sessionmaker
 from .app import PlatformServices, Readiness, create_app
 from .artifacts import WorkerResultService
 from .auth import AuthService
+from .catalogs import CatalogService, CatalogValidationError
 from .imports import BatchImportService
 from .jobs import JobQueueService, LeaseService
 from .media import MediaService
@@ -68,6 +69,7 @@ class PlatformRuntime:
             results=WorkerResultService(self.sessions, self.storage),
             media=MediaService(self.sessions, self.storage),
             reviews=ReviewService(self.sessions),
+            catalogs=CatalogService(self.sessions, self.storage),
         )
         self.app = create_app(
             readiness_probe=self.readiness,
@@ -107,8 +109,12 @@ class PlatformRuntime:
             details.append("文件库分区不存在或不可读写")
 
         active_catalog = not self.settings.require_active_catalog
-        if not active_catalog:
-            details.append("尚未配置 active Catalog")
+        if self.settings.require_active_catalog:
+            try:
+                self.services.catalogs.active_version()
+                active_catalog = True
+            except CatalogValidationError as exc:
+                details.append(str(exc))
         return Readiness(
             database=database,
             storage=storage,

@@ -275,6 +275,34 @@ class Crop(TimestampMixin, Base):
     )
 
 
+class CropEmbedding(TimestampMixin, Base):
+    __tablename__ = "crop_embeddings"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    crop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("crops.id", ondelete="RESTRICT"), nullable=False)
+    artifact_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("artifacts.id", ondelete="RESTRICT"), nullable=False)
+    row_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    feature_dim: Mapped[int] = mapped_column(Integer, nullable=False)
+    embedding_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    preprocess_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    pipeline_config_digest: Mapped[str] = mapped_column(
+        String(64), nullable=False)
+    __table_args__ = (
+        UniqueConstraint(
+            "crop_id", "model_version", "preprocess_id",
+            name="crop_embeddings_crop_model_preprocess",
+        ),
+        UniqueConstraint(
+            "artifact_id", "row_index",
+            name="crop_embeddings_artifact_row",
+        ),
+        CheckConstraint("row_index >= 0", name="nonnegative_row_index"),
+        CheckConstraint("feature_dim > 0", name="positive_feature_dim"),
+    )
+
+
 class Job(TimestampMixin, Base):
     __tablename__ = "jobs"
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
@@ -426,6 +454,34 @@ class CandidateClusterMember(Base):
         Boolean, default=False, nullable=False)
 
 
+class MatchCandidate(TimestampMixin, Base):
+    __tablename__ = "match_candidates"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    cluster_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("candidate_clusters.id", ondelete="CASCADE"), nullable=False)
+    catalog_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_versions.id", ondelete="RESTRICT"), nullable=False)
+    individual_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("confirmed_individuals.id", ondelete="RESTRICT"),
+        nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    support_frames: Mapped[int] = mapped_column(Integer, nullable=False)
+    model_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), default="needs_review", nullable=False)
+    __table_args__ = (
+        UniqueConstraint(
+            "cluster_id", "rank", name="match_candidates_cluster_rank"),
+        UniqueConstraint(
+            "cluster_id", "individual_id",
+            name="match_candidates_cluster_individual",
+        ),
+        CheckConstraint("rank > 0", name="positive_rank"),
+        CheckConstraint("support_frames > 0", name="positive_support_frames"),
+    )
+
+
 class CandidateEvent(Base):
     __tablename__ = "candidate_events"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -550,6 +606,75 @@ class IdentityEvent(Base):
         ForeignKey("review_tasks.id", ondelete="RESTRICT"),
         unique=True, nullable=False)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class CatalogVersion(TimestampMixin, Base):
+    __tablename__ = "catalog_versions"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    status: Mapped[str] = mapped_column(String(32), default="staged", nullable=False)
+    model_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    calibration_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    feature_dim: Mapped[int] = mapped_column(Integer, nullable=False)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    membership_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    index_path: Mapped[str] = mapped_column(Text, nullable=False)
+    index_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    parent_catalog_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("catalog_versions.id", ondelete="RESTRICT"))
+    source_batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("batches.id", ondelete="RESTRICT"))
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint("feature_dim > 0", name="positive_feature_dim"),
+        CheckConstraint("row_count > 0", name="positive_row_count"),
+        CheckConstraint(
+            "status IN ('staged', 'active', 'retired')",
+            name="valid_status"),
+    )
+
+
+class CatalogMembership(Base):
+    __tablename__ = "catalog_memberships"
+    catalog_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_versions.id", ondelete="CASCADE"), primary_key=True)
+    observation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("observations.id", ondelete="RESTRICT"), primary_key=True)
+    individual_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("confirmed_individuals.id", ondelete="RESTRICT"),
+        nullable=False)
+    row_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    embedding_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    __table_args__ = (
+        UniqueConstraint("catalog_id", "row_index"),
+        CheckConstraint("row_index >= 0", name="nonnegative_row_index"),
+    )
+
+
+class ActiveCatalogPointer(Base):
+    __tablename__ = "active_catalog_pointer"
+    singleton_id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    catalog_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_versions.id", ondelete="RESTRICT"),
+        unique=True, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+        onupdate=func.now(), nullable=False)
+    __table_args__ = (
+        CheckConstraint("singleton_id = 1", name="singleton"),
+    )
+
+
+class CatalogEvent(Base):
+    __tablename__ = "catalog_events"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    catalog_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_versions.id", ondelete="RESTRICT"), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    previous_catalog_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("catalog_versions.id", ondelete="RESTRICT"))
     payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)

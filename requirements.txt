@@ -19,6 +19,7 @@ alembic>=1.16,<2
 psycopg[binary]>=3.2,<4
 pydantic-settings>=2.10,<3
 argon2-cffi>=25,<26
+faiss-cpu>=1.12,<2
 
 # 可选（按需安装）
 # faiss-cpu            # Faiss Top-K 加速

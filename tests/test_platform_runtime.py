@@ -18,6 +18,7 @@ from whitewhale.platform.runtime import (  # noqa: E402
     PlatformSettings,
     build_runtime,
 )
+from whitewhale.platform.models import Base  # noqa: E402
 
 
 TEST_DATABASE_URL = os.getenv("WHITEWHALE_TEST_DATABASE_URL")
@@ -50,6 +51,23 @@ class TestPlatformRuntime(unittest.TestCase):
             command.upgrade(config, "head")
             after = runtime.readiness()
             self.assertTrue(after.ready, after.detail)
+            runtime.engine.dispose()
+
+    def test_required_catalog_readiness_tracks_the_active_pointer(self):
+        engine = create_engine(TEST_DATABASE_URL)
+        Base.metadata.drop_all(engine)
+        Base.metadata.create_all(engine)
+        engine.dispose()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runtime = build_runtime(PlatformSettings(
+                database_url=TEST_DATABASE_URL,
+                data_root=Path(tmp_dir),
+                alembic_ini=ROOT / "alembic.ini",
+                require_active_catalog=True,
+            ))
+            result = runtime.readiness()
+            self.assertFalse(result.active_catalog)
+            self.assertIn("active Catalog", result.detail)
             runtime.engine.dispose()
 
 

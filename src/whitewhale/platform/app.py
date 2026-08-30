@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from datetime import date
 import uuid
 
+import numpy as np
 from fastapi import (
     Depends,
     FastAPI,
@@ -31,6 +32,7 @@ from .auth import (
     InvalidSession,
     Principal,
 )
+from .catalogs import CatalogService, CatalogSnapshot, CatalogValidationError
 from .imports import BatchImportService
 from .jobs import InvalidLease, JobConflict, JobQueueService, LeaseService
 from .media import MediaNotFound, MediaService
@@ -77,6 +79,7 @@ class PlatformServices:
     results: WorkerResultService | None = None
     media: MediaService | None = None
     reviews: ReviewService | None = None
+    catalogs: CatalogService | None = None
 
 
 class _StrictModel(BaseModel):
@@ -146,6 +149,11 @@ class ReviewTaskCreateRequest(_StrictModel):
 class ReviewVoteRequest(_StrictModel):
     choice: str
     individual_id: uuid.UUID | None = None
+
+
+class EmbeddingQueryRequest(_StrictModel):
+    embedding: list[float] = Field(min_length=1)
+    k: int = Field(default=5, gt=0, le=100)
 
 
 def _default_readiness_probe() -> Readiness:
@@ -479,6 +487,69 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
             return _review_decision_body(decision)
 
+    if services.catalogs is not None:
+        @app.get("/api/catalogs")
+        def list_catalogs(request: Request):
+            current_principal(request)
+            return [
+                _catalog_snapshot_body(item)
+                for item in services.catalogs.list_versions()
+            ]
+
+        @app.get("/api/catalogs/active")
+        def get_active_catalog(request: Request):
+            current_principal(request)
+            try:
+                snapshot = services.catalogs.active_version()
+            except CatalogValidationError as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, str(exc)) from exc
+            return _catalog_snapshot_body(snapshot)
+
+        @app.post("/api/catalogs/{catalog_id}/activate")
+        def activate_catalog(
+            catalog_id: uuid.UUID,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_admin(principal)
+            try:
+                services.catalogs.activate(catalog_id)
+                snapshot = services.catalogs.active_version()
+            except CatalogValidationError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return _catalog_snapshot_body(snapshot)
+
+        @app.post("/api/query/embedding")
+        def query_embedding(body: EmbeddingQueryRequest, request: Request):
+            current_principal(request)
+            try:
+                matches = services.catalogs.search(
+                    np.asarray(body.embedding, dtype=np.float32), k=body.k)
+            except CatalogValidationError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            if not matches:
+                snapshot = services.catalogs.active_version()
+                return {
+                    "catalog_id": str(snapshot.catalog_id),
+                    "model_version": snapshot.model_version,
+                    "calibration_status": snapshot.calibration_status,
+                    "matches": [],
+                }
+            first = matches[0]
+            return {
+                "catalog_id": str(first.catalog_id),
+                "model_version": first.model_version,
+                "calibration_status": first.calibration_status,
+                "matches": [{
+                    "individual_id": str(item.individual_id),
+                    "observation_id": str(item.observation_id),
+                    "score": item.score,
+                    "support_frames": item.support_frames,
+                } for item in matches],
+            }
+
     if all((services.worker_auth, services.jobs,
             services.leases, services.results)):
         _mount_worker_api(
@@ -775,4 +846,22 @@ def _review_view_body(view) -> dict:
         } for vote in view.own_votes],
         "consensus": _review_decision_body(view.consensus)
         if view.consensus else None,
+    }
+
+
+def _catalog_snapshot_body(snapshot: CatalogSnapshot) -> dict:
+    return {
+        "catalog_id": str(snapshot.catalog_id),
+        "status": snapshot.status,
+        "model_version": snapshot.model_version,
+        "calibration_status": snapshot.calibration_status,
+        "feature_dim": snapshot.feature_dim,
+        "row_count": snapshot.row_count,
+        "parent_catalog_id": str(snapshot.parent_catalog_id)
+        if snapshot.parent_catalog_id else None,
+        "source_batch_id": str(snapshot.source_batch_id)
+        if snapshot.source_batch_id else None,
+        "activated_at": snapshot.activated_at.isoformat()
+        if snapshot.activated_at else None,
+        "created_at": snapshot.created_at.isoformat(),
     }
