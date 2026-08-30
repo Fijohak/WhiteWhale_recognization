@@ -21,6 +21,8 @@ from whitewhale.platform.imports import BatchImportService  # noqa: E402
 from whitewhale.platform.models import (  # noqa: E402
     Base,
     Batch,
+    Collection,
+    CollectionMembership,
     Image,
     SourceGroup,
     User,
@@ -124,6 +126,28 @@ class TestBatchImports(unittest.TestCase):
                 batch = session.get(Batch, batch_id)
                 self.assertEqual(batch.metadata_json["captured_on"],
                                  "2014-04-19")
+
+    def test_nn_relationship_is_added_to_candidate_collection_not_identity(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            layout = StorageLayout(tmp_dir)
+            layout.initialize()
+            upload_id, _ = self._completed_upload(
+                layout, "nn relationship/pair.jpg", "idolphin")
+            batch_id = BatchImportService(
+                self.sessions, layout).import_upload(upload_id)
+            with self.sessions() as session:
+                image = session.scalar(select(Image).where(
+                    Image.batch_id == batch_id))
+                collection = session.scalar(select(Collection).where(
+                    Collection.system_key == "nn_relationship"))
+                membership = session.scalar(select(CollectionMembership).where(
+                    CollectionMembership.collection_id == collection.id,
+                    CollectionMembership.image_id == image.id,
+                ))
+                self.assertIsNotNone(membership)
+                self.assertEqual(membership.membership_status, "candidate")
+                self.assertEqual(
+                    membership.assignment_source, "original_folder")
 
 
 if __name__ == "__main__":

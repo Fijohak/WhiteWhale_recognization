@@ -13,7 +13,7 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from whitewhale.detection.detector import detect_and_crop
+from whitewhale.detection.detector import detect_all_and_crop
 from whitewhale.pipeline.archival import cluster_embeddings
 from whitewhale.reid.embedding import extract_embeddings, make_embedder
 
@@ -37,7 +37,7 @@ def make_batch_archival_handler(
     api,
     config: ArchivalWorkerConfig,
     *,
-    detect_fn: Callable = detect_and_crop,
+    detect_fn: Callable = detect_all_and_crop,
     embedder_factory: Callable = make_embedder,
     extract_fn: Callable = extract_embeddings,
     cluster_fn: Callable = cluster_embeddings,
@@ -78,8 +78,22 @@ def make_batch_archival_handler(
                 pad_down=config.pad_down,
                 preview=False,
             )
-            if list(detected["image_id"].astype(str)) != [
-                    item["image_id"] for item in rows]:
+            detected = detected.copy().reset_index(drop=True)
+            if "crop_index" not in detected.columns:
+                detected["crop_index"] = detected.groupby(
+                    "image_id", sort=False).cumcount()
+            if "crop_key" not in detected.columns:
+                counts = detected.groupby("image_id")["image_id"].transform("size")
+                detected["crop_key"] = [
+                    str(image_id) if count == 1 else
+                    f"{image_id}--{int(index):03d}"
+                    for image_id, index, count in zip(
+                        detected["image_id"], detected["crop_index"], counts,
+                        strict=True)
+                ]
+            observed_images = list(dict.fromkeys(
+                detected["image_id"].astype(str)))
+            if observed_images != [item["image_id"] for item in rows]:
                 raise ValueError("检测结果行序与服务器图片清单不一致")
             embedder = embedder_factory(
                 "metric-learning",
@@ -90,8 +104,11 @@ def make_batch_archival_handler(
             if actual_preprocess is not None \
                     and actual_preprocess != manifest["preprocess_id"]:
                 raise ValueError("Worker Re-ID 预处理协议与任务不一致")
+            embedding_rows = detected.copy()
+            embedding_rows["source_image_id"] = embedding_rows["image_id"]
+            embedding_rows["image_id"] = embedding_rows["crop_key"]
             vectors, _ = extract_fn(
-                detected,
+                embedding_rows,
                 embedder,
                 crops_dir=crops_root,
                 missing="error",
@@ -160,11 +177,11 @@ def _build_output_manifest(
 ) -> dict:
     if len(detected) != len(labels) or len(labels) != len(probabilities):
         raise ValueError("聚类结果与 Crop 行数不一致")
-    crop_keys = detected["image_id"].astype(str).tolist()
+    crop_keys = detected["crop_key"].astype(str).tolist()
     crops = [{
         "key": key,
-        "image_id": key,
-        "crop_index": 0,
+        "image_id": str(row.image_id),
+        "crop_index": int(row.crop_index),
         "bbox": [int(row.x), int(row.y), int(row.w), int(row.h)],
         "path": f"crops/{key}.jpg",
         "quality": float(row.det_conf),

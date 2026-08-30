@@ -9,6 +9,7 @@ from dataclasses import dataclass
 _CHOICES = frozenset({
     "confirm_cluster", "reject", "uncertain", "split_required", "unusable",
     "existing", "new",
+    "confirm_multi_target",
 })
 
 
@@ -81,5 +82,24 @@ def decide_identity_match(votes: list[ReviewVote]) -> ReviewDecision:
     return ReviewDecision(
         "conflict",
         "uncertain",
+        flags=frozenset({"manual_resolution_required"}),
+    )
+
+
+def decide_multi_target(votes: list[ReviewVote]) -> ReviewDecision:
+    if len(votes) < 3:
+        return ReviewDecision("pending")
+    if len(votes) > 3:
+        raise ValueError("多目标真实性审核固定为 3 名审核人")
+    allowed = {"confirm_multi_target", "reject", "uncertain"}
+    if any(vote.choice not in allowed for vote in votes):
+        raise ValueError("多目标真实性审核包含非法选项")
+    counts = Counter(vote.choice for vote in votes)
+    if counts["confirm_multi_target"] >= 2:
+        return ReviewDecision("resolved", "multi_target_confirmed")
+    if counts["reject"] >= 2:
+        return ReviewDecision("resolved", "multi_target_rejected")
+    return ReviewDecision(
+        "conflict", "uncertain",
         flags=frozenset({"manual_resolution_required"}),
     )

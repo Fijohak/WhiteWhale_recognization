@@ -33,6 +33,7 @@ from whitewhale.platform.models import (  # noqa: E402
     ConfirmedIndividual,
     Crop,
     CropEmbedding,
+    CooccurrenceEvent,
     Image,
     Job,
     JobAttempt,
@@ -170,12 +171,12 @@ class TestArchivalWorkflow(unittest.TestCase):
             "row_binding_digest": row_digest,
             "crops": [{
                 "key": crop_keys[index],
-                "image_id": str(image_id),
-                "crop_index": 0,
+                "image_id": str(self.image_ids[0]),
+                "crop_index": index,
                 "bbox": [1, 2, 20, 10],
                 "path": f"crops/{index}.jpg",
                 "quality": 0.9,
-            } for index, image_id in enumerate(self.image_ids)],
+            } for index in range(2)],
             "clusters": [{
                 "label": "cluster-0",
                 "member_keys": crop_keys,
@@ -219,7 +220,10 @@ class TestArchivalWorkflow(unittest.TestCase):
         workflow = ArchivalWorkflowService(
             self.sessions, self.layout, catalogs=catalogs)
         cluster_ids = workflow.ingest_artifact(
-            artifact_id, purity_reviewer_id=self.reviewer_ids[0])
+            artifact_id,
+            purity_reviewer_id=self.reviewer_ids[0],
+            multi_target_reviewer_ids=self.reviewer_ids,
+        )
         self.assertEqual(len(cluster_ids), 1)
         with self.sessions() as db:
             self.assertEqual(db.get(Batch, self.batch_id).stage,
@@ -228,6 +232,8 @@ class TestArchivalWorkflow(unittest.TestCase):
                 select(func.count()).select_from(Crop)), 2)
             self.assertEqual(db.scalar(
                 select(func.count()).select_from(CropEmbedding)), 2)
+            self.assertEqual(db.scalar(
+                select(func.count()).select_from(CooccurrenceEvent)), 1)
             self.assertEqual(db.scalar(
                 select(func.count()).select_from(ConfirmedIndividual)), 0)
             purity_task_id = db.scalar(select(ReviewTask.id).where(

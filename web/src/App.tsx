@@ -5,13 +5,16 @@ import {
   completeFile,
   completeSession,
   createUpload,
+  applyMultiTargetReview,
   getUploadStatus,
   importSession,
   activateCatalog,
   getCandidate,
+  getCooccurrence,
   listBatches,
   listCatalogs,
   listIndividuals,
+  listRelationships,
   login,
   logout,
   me,
@@ -21,8 +24,10 @@ import {
   type BatchSummary,
   type Candidate,
   type Catalog,
+  type Cooccurrence,
   type Individual,
   type ManifestFile,
+  type Relationship,
   type ReviewTask,
   type User
 } from "./api";
@@ -195,25 +200,40 @@ function BatchesPanel() {
 function ReviewPanel() {
   const [tasks, setTasks] = useState<ReviewTask[]>([]);
   const [candidate, setCandidate] = useState<Candidate | null>(null);
+  const [cooccurrence, setCooccurrence] = useState<Cooccurrence | null>(null);
   const [selected, setSelected] = useState<ReviewTask | null>(null);
   const [existingId, setExistingId] = useState("");
   const [message, setMessage] = useState("");
   const refresh = () => reviewInbox().then(setTasks).catch((e) => setMessage(String(e)));
   useEffect(() => { void refresh(); }, []);
-  async function open(task: ReviewTask) { setSelected(task); setCandidate(await getCandidate(task.subject_id)); }
+  async function open(task: ReviewTask) {
+    setSelected(task);
+    setCandidate(null);
+    setCooccurrence(null);
+    if (task.subject_type === "cooccurrence_event") {
+      setCooccurrence(await getCooccurrence(task.subject_id));
+    } else {
+      setCandidate(await getCandidate(task.subject_id));
+    }
+  }
   async function vote(choice: string) {
     if (!selected) return;
-    await submitVote(selected.task_id, choice, choice === "existing" ? existingId : undefined);
+    const decision = await submitVote(
+      selected.task_id, choice, choice === "existing" ? existingId : undefined);
+    if (selected.task_type === "multi_target" && decision.status !== "pending") {
+      await applyMultiTargetReview(selected.task_id);
+    }
     setMessage("本次投票已追加保存；其他审核人的未完成票仍不可见。");
-    setSelected(null); setCandidate(null); await refresh();
+    setSelected(null); setCandidate(null); setCooccurrence(null); await refresh();
   }
   return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">BLIND REVIEW</p><h2>独立审核中心</h2></div><span className="pill">{tasks.length} 待处理</span></div>
     {message && <p className="success">{message}</p>}
-    <div className="review-layout"><div className="data-list compact">{tasks.map((task) => <button className="task-row" key={task.task_id} onClick={() => open(task)}><strong>{task.task_type === "cluster_purity" ? "批内簇纯度" : "历史身份匹配"}</strong><span>{task.subject_id.slice(0, 12)}…</span></button>)}</div>
+    <div className="review-layout"><div className="data-list compact">{tasks.map((task) => <button className="task-row" key={task.task_id} onClick={() => open(task)}><strong>{task.task_type === "cluster_purity" ? "批内簇纯度" : task.task_type === "multi_target" ? "多目标真实性" : "历史身份匹配"}</strong><span>{task.subject_id.slice(0, 12)}…</span></button>)}</div>
       {candidate && selected && <div className="review-detail"><h3>{candidate.label}</h3><div className="crop-grid">{candidate.crops.map((crop) => <img key={crop.crop_id} src={crop.media_url} alt="海豚 Crop" />)}</div>
         {candidate.matches.length > 0 && <div className="matches">{candidate.matches.map((match) => <label key={match.individual_id}><input type="radio" name="existing" onChange={() => setExistingId(match.individual_id)} />#{match.rank} {match.individual_id.slice(0, 8)} · {match.score.toFixed(3)} · {match.support_frames} 帧</label>)}</div>}
         <div className="actions">{selected.task_type === "cluster_purity" ? <><button onClick={() => vote("confirm_cluster")}>确认候选组</button><button className="secondary" onClick={() => vote("split_required")}>需要拆簇</button><button className="danger" onClick={() => vote("unusable")}>不可用</button></> : <><button disabled={!existingId} onClick={() => vote("existing")}>选择 Existing</button><button className="secondary" onClick={() => vote("new")}>选择 New</button><button className="quiet-dark" onClick={() => vote("uncertain")}>不确定</button></>}</div>
-      </div>}</div>
+      </div>}
+      {cooccurrence && selected && <div className="review-detail"><h3>是否确为同一张原图中的多个个体？</h3><p className="muted">只确认多目标事实，不判断亲缘关系。三个审核人的投票彼此独立。</p><div className="crop-grid">{cooccurrence.crops.map((crop) => <img key={crop.crop_id} src={crop.media_url} alt={`目标 ${crop.crop_index + 1}`} />)}</div><div className="actions"><button onClick={() => vote("confirm_multi_target")}>确认多目标</button><button className="danger" onClick={() => vote("reject")}>驳回</button><button className="quiet-dark" onClick={() => vote("uncertain")}>不确定</button></div></div>}</div>
   </section>;
 }
 
@@ -230,10 +250,20 @@ function CatalogPanel() {
   return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">IMMUTABLE CATALOG</p><h2>目录版本</h2></div></div><div className="data-list">{items.map((item) => <article key={item.catalog_id}><div><strong>{item.catalog_id.slice(0, 12)}…</strong><span>{item.model_version} · {item.feature_dim} 维 · {item.row_count} 行</span></div><div className="metrics"><span className="pill">{item.status}</span><small>{item.calibration_status}</small>{item.status !== "active" && <button onClick={() => activateCatalog(item.catalog_id).then(refresh)}>校验并激活</button>}</div></article>)}</div></section>;
 }
 
+function RelationshipsPanel() {
+  const [items, setItems] = useState<Relationship[]>([]);
+  const [error, setError] = useState("");
+  useEffect(() => { listRelationships().then(setItems).catch((e) => setError(String(e))); }, []);
+  const typeName = (value: Relationship["relationship_type"]) => ({
+    co_occurrence: "同框共现", repeated_association: "重复伴随", suspected_kinship: "疑似亲缘"
+  })[value];
+  return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">RELATIONSHIP EVIDENCE</p><h2>关系证据集合</h2></div><span className="pill">{items.length} 条假设</span></div><div className="notice inline-notice"><strong>不是亲缘结论</strong><span>这里仅展示经审核的同框证据与待验证假设；系统不会自动写入“已确认亲缘”。</span></div>{error && <p className="error">{error}</p>}<div className="data-list">{items.map((item) => <article key={item.hypothesis_id}><div><strong>{item.individual_low_name} ↔ {item.individual_high_name}</strong><span>{typeName(item.relationship_type)} · {new Date(item.created_at).toLocaleString()}</span></div><div className="metrics"><b>{item.evidence_count} 条证据</b><span className="pill">{item.status}</span></div></article>)}</div></section>;
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState<"upload" | "batches" | "reviews" | "individuals" | "catalogs">("upload");
+  const [page, setPage] = useState<"upload" | "batches" | "reviews" | "individuals" | "relationships" | "catalogs">("upload");
 
   useEffect(() => {
     me().then(setUser).catch(() => setUser(null)).finally(() => setLoading(false));
@@ -245,7 +275,7 @@ export default function App() {
   return <div className="app-shell">
     <aside>
       <div className="brand"><div className="mark">WW</div><div><strong>WhiteWhale</strong><span>Control Plane</span></div></div>
-      <nav>{[["upload", "批次上传"], ["batches", "批次进度"], ["reviews", "审核中心"], ["individuals", "个体目录"], ["catalogs", "Catalog"]].map(([key, label]) => <button key={key} className={page === key ? "active" : ""} onClick={() => setPage(key as typeof page)}>{label}</button>)}</nav>
+      <nav>{[["upload", "批次上传"], ["batches", "批次进度"], ["reviews", "审核中心"], ["individuals", "个体目录"], ["relationships", "关系证据"], ["catalogs", "Catalog"]].map(([key, label]) => <button key={key} className={page === key ? "active" : ""} onClick={() => setPage(key as typeof page)}>{label}</button>)}</nav>
       <div className="account"><span>{user.username}</span><small>{user.roles.join(" · ")}</small><button className="quiet" onClick={() => logout().finally(() => setUser(null))}>退出</button></div>
     </aside>
     <main className="workspace">
@@ -255,6 +285,7 @@ export default function App() {
       {page === "batches" && <BatchesPanel />}
       {page === "reviews" && <ReviewPanel />}
       {page === "individuals" && <IndividualsPanel />}
+      {page === "relationships" && <RelationshipsPanel />}
       {page === "catalogs" && <CatalogPanel />}
     </main>
   </div>;

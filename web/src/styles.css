@@ -34,6 +34,7 @@ nav button.active { background: #ffffff14; color: white; }
 .status-dot::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: #38a169; }
 .notice { display: flex; gap: 20px; margin: 28px 0; padding: 15px 18px; border-left: 4px solid #e9635c; background: #fff8f4; color: #6d514a; }
 .notice span { color: #816b65; }
+.inline-notice { margin-bottom: 0; }
 .panel { padding: 28px; border: 1px solid #dce7e9; border-radius: 18px; background: white; box-shadow: 0 12px 35px #183f4a0a; }
 .panel-heading { display: flex; justify-content: space-between; align-items: start; }
 .panel h2 { margin: 0; font-family: Georgia, serif; font-size: 28px; color: #123f52; }

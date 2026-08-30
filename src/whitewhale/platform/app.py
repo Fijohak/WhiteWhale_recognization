@@ -35,6 +35,7 @@ from .auth import (
     Principal,
 )
 from .catalogs import CatalogService, CatalogSnapshot, CatalogValidationError
+from .cooccurrence import CooccurrenceService
 from .imports import BatchImportService
 from .jobs import InvalidLease, JobConflict, JobQueueService, LeaseService
 from .media import MediaNotFound, MediaService
@@ -86,6 +87,7 @@ class PlatformServices:
     archival: ArchivalWorkflowService | None = None
     views: ArchiveReadService | None = None
     archival_dispatch: ArchivalDispatchService | None = None
+    cooccurrence: CooccurrenceService | None = None
 
 
 class _StrictModel(BaseModel):
@@ -164,6 +166,7 @@ class EmbeddingQueryRequest(_StrictModel):
 
 class ArchivalIngestRequest(_StrictModel):
     purity_reviewer_id: uuid.UUID
+    multi_target_reviewer_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class PurityAdvanceRequest(_StrictModel):
@@ -183,6 +186,13 @@ class ArchivalJobRequest(_StrictModel):
     pipeline_config: dict = Field(default_factory=dict)
     required_vram_mb: int = Field(default=4096, gt=0)
     max_attempts: int = Field(default=3, gt=0)
+
+
+class CooccurrenceCreateRequest(_StrictModel):
+    image_id: uuid.UUID
+    crop_ids: list[uuid.UUID] = Field(min_length=2)
+    reviewer_ids: list[uuid.UUID]
+    provenance_artifact_id: uuid.UUID | None = None
 
 
 def _default_readiness_probe() -> Readiness:
@@ -500,6 +510,20 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
                 raise HTTPException(
                     status.HTTP_404_NOT_FOUND, str(exc)) from exc
 
+        @app.get("/api/cooccurrences/{event_id}")
+        def get_cooccurrence(event_id: uuid.UUID, request: Request):
+            current_principal(request)
+            try:
+                return services.views.cooccurrence(event_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
+        @app.get("/api/relationships")
+        def list_relationships(request: Request):
+            current_principal(request)
+            return services.views.relationships()
+
         @app.get("/api/individuals")
         def list_individuals(request: Request):
             current_principal(request)
@@ -644,6 +668,7 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
                 cluster_ids = services.archival.ingest_artifact(
                     artifact_id,
                     purity_reviewer_id=body.purity_reviewer_id,
+                    multi_target_reviewer_ids=body.multi_target_reviewer_ids,
                 )
             except ValueError as exc:
                 raise HTTPException(
@@ -739,6 +764,52 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
             return {"job_id": str(job_id)}
+
+    if services.cooccurrence is not None:
+        @app.post("/api/cooccurrences", status_code=status.HTTP_201_CREATED)
+        def create_cooccurrence(
+            body: CooccurrenceCreateRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_upload_role(principal)
+            try:
+                event_id, task_id = services.cooccurrence.create_event(
+                    body.image_id,
+                    body.crop_ids,
+                    reviewer_ids=body.reviewer_ids,
+                    provenance_artifact_id=body.provenance_artifact_id,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"event_id": str(event_id), "task_id": str(task_id)}
+
+        @app.post("/api/reviews/tasks/{task_id}/apply-multi-target")
+        def apply_multi_target_review(
+            task_id: uuid.UUID,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_workflow_role(principal)
+            try:
+                event_id = services.cooccurrence.apply_review(task_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"event_id": str(event_id)}
+
+        @app.post("/api/cooccurrences/{event_id}/project-relationships")
+        def project_cooccurrence_relationships(
+            event_id: uuid.UUID,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_workflow_role(principal)
+            try:
+                hypothesis_ids = services.cooccurrence.project_relationships(
+                    event_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"hypothesis_ids": [str(value) for value in hypothesis_ids]}
 
     if all((services.worker_auth, services.jobs,
             services.leases, services.results)):

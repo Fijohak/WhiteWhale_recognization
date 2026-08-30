@@ -303,6 +303,48 @@ class CropEmbedding(TimestampMixin, Base):
     )
 
 
+class Collection(TimestampMixin, Base):
+    __tablename__ = "collections"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    system_key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+
+
+class CollectionMembership(TimestampMixin, Base):
+    __tablename__ = "collection_memberships"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    collection_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("collections.id", ondelete="CASCADE"), nullable=False)
+    image_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("images.id", ondelete="CASCADE"))
+    crop_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("crops.id", ondelete="CASCADE"))
+    assignment_source: Mapped[str] = mapped_column(String(64), nullable=False)
+    membership_status: Mapped[str] = mapped_column(
+        String(32), default="candidate", nullable=False)
+    __table_args__ = (
+        UniqueConstraint(
+            "collection_id", "image_id",
+            name="collection_memberships_collection_image",
+        ),
+        UniqueConstraint(
+            "collection_id", "crop_id",
+            name="collection_memberships_collection_crop",
+        ),
+        CheckConstraint(
+            "(image_id IS NULL) <> (crop_id IS NULL)",
+            name="exactly_one_subject",
+        ),
+        CheckConstraint(
+            "membership_status IN ('candidate', 'review_pending', "
+            "'confirmed_member', 'rejected')",
+            name="valid_status",
+        ),
+    )
+
+
 class Job(TimestampMixin, Base):
     __tablename__ = "jobs"
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
@@ -606,6 +648,108 @@ class IdentityEvent(Base):
         ForeignKey("review_tasks.id", ondelete="RESTRICT"),
         unique=True, nullable=False)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class CooccurrenceEvent(TimestampMixin, Base):
+    __tablename__ = "cooccurrence_events"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    image_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("images.id", ondelete="RESTRICT"), unique=True,
+        nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), default="review_pending", nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    provenance_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("artifacts.id", ondelete="RESTRICT"))
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('review_pending', 'confirmed', 'rejected', 'disputed')",
+            name="valid_status",
+        ),
+    )
+
+
+class CooccurrenceMember(Base):
+    __tablename__ = "cooccurrence_members"
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cooccurrence_events.id", ondelete="CASCADE"),
+        primary_key=True)
+    crop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("crops.id", ondelete="RESTRICT"), primary_key=True)
+    individual_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("confirmed_individuals.id", ondelete="RESTRICT"))
+    membership_status: Mapped[str] = mapped_column(
+        String(32), default="candidate", nullable=False)
+    source_review_task_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("review_tasks.id", ondelete="RESTRICT"))
+    __table_args__ = (
+        CheckConstraint(
+            "membership_status IN ('candidate', 'confirmed_member', 'rejected')",
+            name="valid_status",
+        ),
+    )
+
+
+class RelationshipHypothesis(TimestampMixin, Base):
+    __tablename__ = "relationship_hypotheses"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    individual_low_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("confirmed_individuals.id", ondelete="RESTRICT"),
+        nullable=False)
+    individual_high_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("confirmed_individuals.id", ondelete="RESTRICT"),
+        nullable=False)
+    relationship_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), default="suspected", nullable=False)
+    __table_args__ = (
+        UniqueConstraint(
+            "individual_low_id", "individual_high_id", "relationship_type",
+            name="relationship_hypotheses_pair_type",
+        ),
+        CheckConstraint(
+            "individual_low_id <> individual_high_id", name="distinct_pair"),
+        CheckConstraint(
+            "relationship_type IN ('co_occurrence', 'repeated_association', "
+            "'suspected_kinship')",
+            name="valid_type",
+        ),
+        CheckConstraint(
+            "status IN ('suspected', 'evidence_insufficient', 'disputed', "
+            "'rejected')",
+            name="valid_status",
+        ),
+    )
+
+
+class RelationshipEvidence(TimestampMixin, Base):
+    __tablename__ = "relationship_evidence"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    hypothesis_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("relationship_hypotheses.id", ondelete="CASCADE"),
+        nullable=False)
+    cooccurrence_event_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cooccurrence_events.id", ondelete="RESTRICT"),
+        nullable=False)
+    evidence_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    __table_args__ = (
+        UniqueConstraint("hypothesis_id", "cooccurrence_event_id"),
+    )
+
+
+class RelationshipEvent(Base):
+    __tablename__ = "relationship_events"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    hypothesis_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("relationship_hypotheses.id", ondelete="RESTRICT"),
+        nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"))
     payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)

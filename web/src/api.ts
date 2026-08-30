@@ -27,6 +27,32 @@ export type Candidate = {
   matches: Array<{ individual_id: string; rank: number; score: number; support_frames: number; model_version: string }>;
 };
 
+export type Cooccurrence = {
+  event_id: string; image_id: string; image_media_url: string;
+  status: string; source: string;
+  crops: Array<{
+    crop_id: string; crop_index: number; media_url: string;
+    membership_status: string; individual_id: string | null;
+    individual_name: string | null;
+  }>;
+};
+
+export type Relationship = {
+  hypothesis_id: string;
+  individual_low_id: string; individual_low_name: string;
+  individual_high_id: string; individual_high_name: string;
+  relationship_type: "co_occurrence" | "repeated_association" | "suspected_kinship";
+  status: "suspected" | "evidence_insufficient" | "disputed" | "rejected";
+  evidence_count: number; created_at: string;
+};
+
+export type ReviewDecision = {
+  status: "pending" | "resolved" | "conflict";
+  conclusion: string | null;
+  individual_id: string | null;
+  flags: string[];
+};
+
 export type Individual = {
   individual_id: string; display_name: string; state: string;
   flags: string[]; observation_count: number;
@@ -176,7 +202,13 @@ export async function getCandidate(clusterId: string): Promise<Candidate> {
   return parse(await fetch(`/api/candidates/${clusterId}`, { credentials: "include" }));
 }
 
-export async function submitVote(taskId: string, choice: string, individualId?: string) {
+export async function getCooccurrence(eventId: string): Promise<Cooccurrence> {
+  return parse(await fetch(`/api/cooccurrences/${eventId}`, { credentials: "include" }));
+}
+
+export async function submitVote(
+  taskId: string, choice: string, individualId?: string
+): Promise<ReviewDecision> {
   return parse(await fetch(`/api/reviews/tasks/${taskId}/votes`, {
     method: "POST", credentials: "include",
     headers: { "Content-Type": "application/json", ...writeHeaders() },
@@ -184,8 +216,18 @@ export async function submitVote(taskId: string, choice: string, individualId?: 
   }));
 }
 
+export async function applyMultiTargetReview(taskId: string): Promise<{ event_id: string }> {
+  return parse(await fetch(`/api/reviews/tasks/${taskId}/apply-multi-target`, {
+    method: "POST", credentials: "include", headers: writeHeaders()
+  }));
+}
+
 export async function listIndividuals(): Promise<Individual[]> {
   return parse(await fetch("/api/individuals", { credentials: "include" }));
+}
+
+export async function listRelationships(): Promise<Relationship[]> {
+  return parse(await fetch("/api/relationships", { credentials: "include" }));
 }
 
 export async function listCatalogs(): Promise<Catalog[]> {

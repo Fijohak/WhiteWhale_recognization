@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from .catalogs import CatalogEntry, CatalogService, build_flat_ip_index
+from .cooccurrence import CooccurrenceService
 from .identities import IdentityService
 from .models import (
     Artifact,
@@ -71,9 +72,12 @@ class ArchivalWorkflowService:
         artifact_id: uuid.UUID,
         *,
         purity_reviewer_id: uuid.UUID,
+        multi_target_reviewer_ids: list[uuid.UUID] | None = None,
     ) -> list[uuid.UUID]:
+        multi_reviewers = list(dict.fromkeys(multi_target_reviewer_ids or []))
         existing = self._existing_clusters(artifact_id)
         if existing:
+            self._ensure_cooccurrences(artifact_id, multi_reviewers)
             return existing
         artifact, artifact_manifest, job = self._artifact_snapshot(artifact_id)
         payload = self._storage.resolve(
@@ -85,6 +89,11 @@ class ArchivalWorkflowService:
         self._validate_manifest(
             manifest, vectors, artifact_manifest, job, crop_files)
         crop_keys = [str(item["key"]) for item in manifest["crops"]]
+        image_counts = Counter(str(item["image_id"])
+                               for item in manifest["crops"])
+        has_multi_target = any(count > 1 for count in image_counts.values())
+        if has_multi_target and len(multi_reviewers) != 3:
+            raise ValueError("多目标归档产物必须指定 3 名 reviewer")
         normalized = self._normalize(vectors)
         server_matches = self._server_matches(manifest, normalized, crop_keys)
         written_paths: list[Path] = []
@@ -107,6 +116,8 @@ class ArchivalWorkflowService:
                 if batch.stage != BatchStage.REGISTERED:
                     raise ValueError("只有 registered Batch 可导入归档产物")
                 self._require_reviewer(db, purity_reviewer_id)
+                for reviewer_id in multi_reviewers:
+                    self._require_reviewer(db, reviewer_id)
                 images = {
                     image.id: image
                     for image in db.scalars(select(Image).where(
@@ -204,11 +215,13 @@ class ArchivalWorkflowService:
                     )
                 batch.stage = advance_batch_stage(
                     batch.stage, BatchStage.CANDIDATE_READY)
-                return cluster_ids
         except BaseException:
             for target in written_paths:
                 target.unlink(missing_ok=True)
             raise
+        if has_multi_target:
+            self._ensure_cooccurrences(artifact_id, multi_reviewers)
+        return cluster_ids
 
     def advance_after_purity(
         self,
@@ -270,6 +283,10 @@ class ArchivalWorkflowService:
             }):
                 batch.stage = advance_batch_stage(
                     batch.stage, BatchStage.APPROVED)
+            crop_ids = list(db.scalars(select(
+                CandidateClusterMember.crop_id).where(
+                    CandidateClusterMember.cluster_id == cluster.id)))
+        CooccurrenceService(self._sessions).project_ready_for_crops(crop_ids)
         return individual_id
 
     def stage_catalog(
@@ -355,6 +372,34 @@ class ArchivalWorkflowService:
                 .where(CandidateCluster.provenance_artifact_id == artifact_id)
                 .order_by(CandidateCluster.label)
             ))
+
+    def _ensure_cooccurrences(
+        self,
+        artifact_id: uuid.UUID,
+        reviewer_ids: list[uuid.UUID],
+    ) -> None:
+        with self._sessions() as db:
+            rows = list(db.execute(
+                select(Crop.image_id, Crop.id)
+                .join(CropEmbedding, CropEmbedding.crop_id == Crop.id)
+                .where(CropEmbedding.artifact_id == artifact_id)
+                .order_by(Crop.image_id, Crop.crop_index)
+            ))
+        by_image: dict[uuid.UUID, list[uuid.UUID]] = {}
+        for image_id, crop_id in rows:
+            by_image.setdefault(image_id, []).append(crop_id)
+        multi = {image_id: crop_ids for image_id, crop_ids in by_image.items()
+                 if len(crop_ids) > 1}
+        if multi and len(reviewer_ids) != 3:
+            raise ValueError("多目标归档产物必须指定 3 名 reviewer")
+        service = CooccurrenceService(self._sessions)
+        for image_id, crop_ids in multi.items():
+            service.create_event(
+                image_id,
+                crop_ids,
+                reviewer_ids=reviewer_ids,
+                provenance_artifact_id=artifact_id,
+            )
 
     def _artifact_snapshot(
         self, artifact_id: uuid.UUID,

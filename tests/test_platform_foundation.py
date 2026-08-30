@@ -72,6 +72,10 @@ class TestPlatformDatabaseMetadata(unittest.TestCase):
             "catalog_versions", "catalog_memberships",
             "active_catalog_pointer", "catalog_events",
             "crop_embeddings", "match_candidates",
+            "collections", "collection_memberships",
+            "cooccurrence_events", "cooccurrence_members",
+            "relationship_hypotheses", "relationship_evidence",
+            "relationship_events",
         }
         self.assertTrue(expected.issubset(Base.metadata.tables))
 

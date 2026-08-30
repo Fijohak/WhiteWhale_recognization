@@ -4,18 +4,22 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, aliased, sessionmaker
 
 from .models import (
     Batch,
     CandidateCluster,
     CandidateClusterMember,
     ConfirmedIndividual,
+    CooccurrenceEvent,
+    CooccurrenceMember,
     Crop,
     Image,
     IndividualAlias,
     MatchCandidate,
     Observation,
+    RelationshipEvidence,
+    RelationshipHypothesis,
     ReviewerRoster,
     ReviewTask,
 )
@@ -112,6 +116,71 @@ class ArchiveReadService:
                     "model_version": match.model_version,
                 } for match in matches],
             }
+
+    def cooccurrence(self, event_id: uuid.UUID) -> dict:
+        with self._sessions() as db:
+            event = db.get(CooccurrenceEvent, event_id)
+            if event is None:
+                raise ValueError("共现事件不存在")
+            rows = list(db.execute(
+                select(CooccurrenceMember, Crop, ConfirmedIndividual)
+                .join(Crop, Crop.id == CooccurrenceMember.crop_id)
+                .outerjoin(
+                    ConfirmedIndividual,
+                    ConfirmedIndividual.id == CooccurrenceMember.individual_id,
+                )
+                .where(CooccurrenceMember.event_id == event_id)
+                .order_by(Crop.crop_index, Crop.id)
+            ))
+            return {
+                "event_id": str(event.id),
+                "image_id": str(event.image_id),
+                "image_media_url": f"/api/media/images/{event.image_id}",
+                "status": event.status,
+                "source": event.source,
+                "crops": [{
+                    "crop_id": str(crop.id),
+                    "crop_index": crop.crop_index,
+                    "media_url": f"/api/media/crops/{crop.id}",
+                    "membership_status": member.membership_status,
+                    "individual_id": str(individual.id) if individual else None,
+                    "individual_name": individual.display_name
+                    if individual else None,
+                } for member, crop, individual in rows],
+            }
+
+    def relationships(self) -> list[dict]:
+        low = aliased(ConfirmedIndividual)
+        high = aliased(ConfirmedIndividual)
+        with self._sessions() as db:
+            rows = list(db.execute(
+                select(
+                    RelationshipHypothesis,
+                    low.display_name,
+                    high.display_name,
+                    func.count(RelationshipEvidence.id),
+                )
+                .join(low, low.id == RelationshipHypothesis.individual_low_id)
+                .join(high, high.id == RelationshipHypothesis.individual_high_id)
+                .outerjoin(
+                    RelationshipEvidence,
+                    RelationshipEvidence.hypothesis_id
+                    == RelationshipHypothesis.id,
+                )
+                .group_by(RelationshipHypothesis.id, low.id, high.id)
+                .order_by(RelationshipHypothesis.created_at.desc())
+            ))
+            return [{
+                "hypothesis_id": str(hypothesis.id),
+                "individual_low_id": str(hypothesis.individual_low_id),
+                "individual_low_name": low_name,
+                "individual_high_id": str(hypothesis.individual_high_id),
+                "individual_high_name": high_name,
+                "relationship_type": hypothesis.relationship_type,
+                "status": hypothesis.status,
+                "evidence_count": evidence_count,
+                "created_at": hypothesis.created_at.isoformat(),
+            } for hypothesis, low_name, high_name, evidence_count in rows]
 
     def individuals(self) -> list[dict]:
         with self._sessions() as db:

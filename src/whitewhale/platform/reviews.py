@@ -21,12 +21,14 @@ from .review_policy import (
     ReviewVote,
     decide_cluster_purity,
     decide_identity_match,
+    decide_multi_target,
 )
 
 
 _POLICIES = {
     "cluster_purity": (1, decide_cluster_purity),
     "identity_match": (3, decide_identity_match),
+    "multi_target": (3, decide_multi_target),
 }
 _POLICY_VERSION = "review-policy-v1"
 

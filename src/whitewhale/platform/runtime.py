@@ -19,6 +19,7 @@ from .archival_dispatch import ArchivalDispatchService
 from .artifacts import WorkerResultService
 from .auth import AuthService
 from .catalogs import CatalogService, CatalogValidationError
+from .cooccurrence import CooccurrenceService
 from .imports import BatchImportService
 from .jobs import JobQueueService, LeaseService
 from .media import MediaService
@@ -79,6 +80,7 @@ class PlatformRuntime:
                 self.sessions, self.storage, catalogs=catalogs),
             views=ArchiveReadService(self.sessions),
             archival_dispatch=ArchivalDispatchService(self.sessions, jobs),
+            cooccurrence=CooccurrenceService(self.sessions),
         )
         self.app = create_app(
             readiness_probe=self.readiness,

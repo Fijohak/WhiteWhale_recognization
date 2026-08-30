@@ -167,3 +167,77 @@ def detect_and_crop(df: pd.DataFrame, images_root: Path, out_dir: Path,
     for fid, reason in failures[:20]:
         print(f"[detect]   FAIL {fid}: {reason}")
     return out
+
+
+def detect_all_and_crop(
+    df: pd.DataFrame,
+    images_root: Path,
+    out_dir: Path,
+    weights: Path,
+    conf: float = 0.25,
+    imgsz: int = 1024,
+    device: str | int | None = "auto",
+    pad_x: float = 0.30,
+    pad_up: float = 0.15,
+    pad_down: float = 0.60,
+    preview: bool = False,
+    *,
+    model_factory=None,
+) -> pd.DataFrame:
+    """逐图保留 YOLO NMS 后的全部目标，每个框生成独立 Crop。"""
+    if "image_id" not in df.columns or "relative_path" not in df.columns:
+        raise ValueError("检测清单必须包含 image_id 和 relative_path")
+    validate_safe_image_ids(df["image_id"])
+    store = ImageStore(images_root)
+    sources = [store.resolve(path) for path in df["relative_path"]]
+    if any(not path.is_file() for path in sources):
+        raise FileNotFoundError("多目标检测清单包含不存在的原图")
+    if model_factory is None:
+        from ultralytics import YOLO
+        model_factory = YOLO
+    model = model_factory(str(weights))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for _, source_row in df.iterrows():
+        image_id = str(source_row["image_id"])
+        source_path = store.resolve(source_row["relative_path"])
+        image = store.open(source_row["relative_path"])
+        width, height = image.size
+        results = model.predict(
+            str(source_path), conf=conf, imgsz=imgsz,
+            device=resolve_yolo_device(device), verbose=False)
+        boxes = list(results[0].boxes) if len(results) else []
+        detections = []
+        for box in boxes:
+            x0, y0, x1, y1 = [float(value) for value in box.xyxy[0]]
+            detections.append((
+                expand_box(
+                    x0, y0, x1, y1, width, height,
+                    pad_x, pad_up, pad_down),
+                float(box.conf[0]),
+                False,
+            ))
+        if not detections:
+            detections = [(center_fallback_box(width, height), 0.0, True)]
+        for crop_index, (bounds, confidence, fallback) in enumerate(detections):
+            crop_key = f"{image_id}--{crop_index:03d}"
+            crop = image.crop((
+                bounds[0], bounds[1],
+                bounds[0] + bounds[2], bounds[1] + bounds[3],
+            ))
+            crop.save(out_dir / f"{crop_key}.jpg")
+            rows.append({
+                "crop_key": crop_key,
+                "image_id": image_id,
+                "crop_index": crop_index,
+                "relative_path": source_row["relative_path"],
+                "session_id": source_row.get("session_id", ""),
+                "x": bounds[0], "y": bounds[1],
+                "w": bounds[2], "h": bounds[3],
+                "det_conf": round(confidence, 4),
+                "fallback": fallback,
+            })
+    result = pd.DataFrame(rows)
+    result.to_csv(
+        out_dir / "crops_manifest.csv", index=False, encoding="utf-8-sig")
+    return result

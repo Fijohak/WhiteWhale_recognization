@@ -9,10 +9,13 @@ from datetime import date
 from pathlib import Path
 
 from PIL import Image as PillowImage
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from .models import Batch, Image, SourceGroup, UploadFile, UploadSession
+from .models import (
+    Batch, Collection, CollectionMembership, Image, SourceGroup, UploadFile,
+    UploadSession,
+)
 from .storage import StorageLayout
 
 
@@ -120,7 +123,7 @@ class BatchImportService:
                     target.parent.mkdir(parents=True, exist_ok=True)
                     os.replace(staged_path, target)
                     moved.append((target, staged_path))
-                    db.add(Image(
+                    image = Image(
                         batch_id=batch_id,
                         source_group_id=group.id,
                         source_path=raw_relative.as_posix(),
@@ -130,7 +133,32 @@ class BatchImportService:
                         quality_band=semantics.quality_band,
                         relation_note=semantics.relation_note,
                         exif_json=exif,
-                    ))
+                    )
+                    db.add(image)
+                    if semantics.relation_note == "nn_relationship":
+                        db.flush()
+                        db.execute(text(
+                            "SELECT pg_advisory_xact_lock(91524003)"))
+                        collection = db.scalar(select(Collection).where(
+                            Collection.system_key == "nn_relationship"))
+                        if collection is None:
+                            collection = Collection(
+                                system_key="nn_relationship",
+                                name="疑似关系样本",
+                                kind="relationship_candidate",
+                                description=(
+                                    "原始 nn relationship 目录；只表示疑似关系，"
+                                    "不表示已确认亲缘。"
+                                ),
+                            )
+                            db.add(collection)
+                            db.flush()
+                        db.add(CollectionMembership(
+                            collection_id=collection.id,
+                            image_id=image.id,
+                            assignment_source="original_folder",
+                            membership_status="candidate",
+                        ))
             return batch_id
         except BaseException:
             for target, staged_path in reversed(moved):
