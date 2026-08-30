@@ -46,3 +46,6 @@ build/
 external/
 
 src_dataset/
+
+datas/
+.serena/
