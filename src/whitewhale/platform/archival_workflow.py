@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from .catalogs import CatalogEntry, CatalogService, build_flat_ip_index
 from .identities import IdentityService
 from .models import (
-    ActiveCatalogPointer,
     Artifact,
     ArtifactManifest,
     Batch,
@@ -87,6 +86,7 @@ class ArchivalWorkflowService:
             manifest, vectors, artifact_manifest, job, crop_files)
         crop_keys = [str(item["key"]) for item in manifest["crops"]]
         normalized = self._normalize(vectors)
+        server_matches = self._server_matches(manifest, normalized, crop_keys)
         written_paths: list[Path] = []
         extracted_paths: dict[str, str] = {}
         try:
@@ -151,9 +151,6 @@ class ArchivalWorkflowService:
                     ))
                     crop_rows[key] = crop
 
-                active_catalog_id = db.scalar(select(
-                    ActiveCatalogPointer.catalog_id).where(
-                        ActiveCatalogPointer.singleton_id == 1))
                 cluster_ids: list[uuid.UUID] = []
                 for cluster_data in manifest["clusters"]:
                     member_keys = [str(value)
@@ -191,8 +188,7 @@ class ArchivalWorkflowService:
                     self._add_matches(
                         db,
                         cluster,
-                        cluster_data.get("matches", []),
-                        active_catalog_id,
+                        server_matches[str(cluster_data["label"])],
                         manifest["model_version"],
                     )
                     db.add(CandidateEvent(
@@ -451,6 +447,8 @@ class ArchivalWorkflowService:
             raise ValueError("归档 Crop 文件清单不一致")
         counts: Counter[str] = Counter()
         for cluster in manifest["clusters"]:
+            if cluster.get("matches"):
+                raise ValueError("历史匹配必须由服务器对 active Catalog 计算")
             member_keys = [str(value) for value in cluster.get("member_keys", [])]
             if not member_keys or any(key not in set(keys) for key in member_keys):
                 raise ValueError("候选簇引用未知或空 Crop")
@@ -459,6 +457,24 @@ class ArchivalWorkflowService:
             counts.update(member_keys)
         if counts != Counter({key: 1 for key in keys}):
             raise ValueError("每个 Crop 必须且只能属于一个候选簇")
+
+    def _server_matches(
+        self,
+        manifest: dict,
+        vectors: np.ndarray,
+        crop_keys: list[str],
+    ) -> dict[str, list]:
+        if self._catalogs.active_catalog_id() is None:
+            return {str(cluster["label"]): []
+                    for cluster in manifest["clusters"]}
+        positions = {key: index for index, key in enumerate(crop_keys)}
+        results = {}
+        for cluster in manifest["clusters"]:
+            indices = [positions[str(key)] for key in cluster["member_keys"]]
+            probe = self._normalize(
+                vectors[indices].mean(axis=0, keepdims=True))[0]
+            results[str(cluster["label"])] = self._catalogs.search(probe, k=5)
+        return results
 
     @staticmethod
     def _normalize(vectors: np.ndarray) -> np.ndarray:
@@ -525,27 +541,24 @@ class ArchivalWorkflowService:
     def _add_matches(
         db: Session,
         cluster: CandidateCluster,
-        matches: list[dict],
-        active_catalog_id: uuid.UUID | None,
+        matches: list,
         model_version: str,
     ) -> None:
         if not matches:
             return
-        if active_catalog_id is None:
-            raise ValueError("Worker 返回历史匹配，但服务器没有 active Catalog")
         for rank, match in enumerate(matches, start=1):
-            if int(match.get("rank", rank)) != rank:
-                raise ValueError("历史匹配 rank 必须从 1 连续递增")
-            individual_id = uuid.UUID(str(match["individual_id"]))
+            individual_id = match.individual_id
+            if match.model_version != model_version:
+                raise ValueError("active Catalog 与归档 Embedding 模型版本不兼容")
             if db.get(ConfirmedIndividual, individual_id) is None:
                 raise ValueError("历史匹配引用不存在的正式个体")
             db.add(MatchCandidate(
                 cluster_id=cluster.id,
-                catalog_id=active_catalog_id,
+                catalog_id=match.catalog_id,
                 individual_id=individual_id,
                 rank=rank,
-                score=float(match["score"]),
-                support_frames=int(match["support_frames"]),
+                score=float(match.score),
+                support_frames=int(match.support_frames),
                 model_version=model_version,
             ))
 
