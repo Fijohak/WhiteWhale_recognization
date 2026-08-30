@@ -21,6 +21,7 @@ from .auth import AuthService
 from .catalogs import CatalogService, CatalogValidationError
 from .cooccurrence import CooccurrenceService
 from .imports import BatchImportService
+from .identity_changes import IdentityChangeService
 from .jobs import JobQueueService, LeaseService
 from .media import MediaService
 from .reviews import ReviewService
@@ -81,6 +82,7 @@ class PlatformRuntime:
             views=ArchiveReadService(self.sessions),
             archival_dispatch=ArchivalDispatchService(self.sessions, jobs),
             cooccurrence=CooccurrenceService(self.sessions),
+            identity_changes=IdentityChangeService(self.sessions),
         )
         self.app = create_app(
             readiness_probe=self.readiness,

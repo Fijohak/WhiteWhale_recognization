@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from whitewhale.platform.cooccurrence import CooccurrenceService  # noqa: E402
+from whitewhale.platform.identity_changes import IdentityChangeService  # noqa: E402
 from whitewhale.platform.models import (  # noqa: E402
     Base, Batch, Collection, CollectionMembership, ConfirmedIndividual,
     CooccurrenceEvent, CooccurrenceMember, Crop, Image, Observation,
@@ -125,9 +126,12 @@ class TestCooccurrence(unittest.TestCase):
                     source_review_task_id=task_id))
         self.assertEqual(service.project_ready_for_crops(self.crop_ids[:2]), [])
         with self.sessions.begin() as db:
-            db.add(Observation(
+            withdrawn_observation = Observation(
                 individual_id=individuals[2].id, crop_id=self.crop_ids[2],
-                source_review_task_id=task_id))
+                source_review_task_id=task_id)
+            db.add(withdrawn_observation)
+            db.flush()
+            withdrawn_observation_id = withdrawn_observation.id
         hypotheses = service.project_ready_for_crops([self.crop_ids[2]])
         self.assertEqual(len(hypotheses), 3)
         with self.sessions() as db:
@@ -152,6 +156,23 @@ class TestCooccurrence(unittest.TestCase):
         with self.sessions() as db:
             self.assertEqual(db.scalar(select(func.count()).select_from(
                 RelationshipEvidence)), 3)
+
+        changes = IdentityChangeService(self.sessions)
+        _, withdrawal_task_id = changes.create_withdrawal(
+            [withdrawn_observation_id],
+            reviewer_ids=self.reviewers,
+            actor_user_id=self.reviewers[0],
+        )
+        reviews = ReviewService(self.sessions)
+        for reviewer_id in self.reviewers:
+            reviews.submit_vote(
+                withdrawal_task_id, reviewer_id,
+                ReviewVote("approve_change"))
+        changes.apply_review(withdrawal_task_id)
+        with self.sessions() as db:
+            statuses = set(db.scalars(select(
+                RelationshipHypothesis.status)))
+            self.assertEqual(statuses, {"evidence_insufficient"})
 
 
 if __name__ == "__main__":

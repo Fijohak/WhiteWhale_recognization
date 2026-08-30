@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from whitewhale.platform.review_policy import (  # noqa: E402
     ReviewVote,
     decide_cluster_purity,
+    decide_identity_change,
     decide_identity_match,
 )
 
@@ -67,6 +68,25 @@ class TestReviewPolicy(unittest.TestCase):
             ReviewVote(choice="existing")
         with self.assertRaisesRegex(ValueError, "不允许"):
             ReviewVote(choice="confirmed_kinship")
+
+    def test_identity_changes_require_three_matching_votes(self):
+        approved = decide_identity_change([
+            ReviewVote(choice="approve_change") for _ in range(3)
+        ])
+        self.assertEqual(approved.status, "resolved")
+        self.assertEqual(approved.conclusion, "identity_change_approved")
+
+        rejected = decide_identity_change([
+            ReviewVote(choice="reject") for _ in range(3)
+        ])
+        self.assertEqual(rejected.conclusion, "identity_change_rejected")
+
+        conflict = decide_identity_change([
+            ReviewVote(choice="approve_change"),
+            ReviewVote(choice="approve_change"),
+            ReviewVote(choice="uncertain"),
+        ])
+        self.assertEqual(conflict.status, "conflict")
 
 
 if __name__ == "__main__":

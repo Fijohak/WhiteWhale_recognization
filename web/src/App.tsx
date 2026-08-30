@@ -6,11 +6,13 @@ import {
   completeSession,
   createUpload,
   applyMultiTargetReview,
+  applyIdentityChange,
   getUploadStatus,
   importSession,
   activateCatalog,
   getCandidate,
   getCooccurrence,
+  getIdentityChange,
   listBatches,
   listCatalogs,
   listIndividuals,
@@ -26,6 +28,7 @@ import {
   type Catalog,
   type Cooccurrence,
   type Individual,
+  type IdentityChange,
   type ManifestFile,
   type Relationship,
   type ReviewTask,
@@ -201,6 +204,7 @@ function ReviewPanel() {
   const [tasks, setTasks] = useState<ReviewTask[]>([]);
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [cooccurrence, setCooccurrence] = useState<Cooccurrence | null>(null);
+  const [identityChange, setIdentityChange] = useState<IdentityChange | null>(null);
   const [selected, setSelected] = useState<ReviewTask | null>(null);
   const [existingId, setExistingId] = useState("");
   const [message, setMessage] = useState("");
@@ -210,8 +214,11 @@ function ReviewPanel() {
     setSelected(task);
     setCandidate(null);
     setCooccurrence(null);
+    setIdentityChange(null);
     if (task.subject_type === "cooccurrence_event") {
       setCooccurrence(await getCooccurrence(task.subject_id));
+    } else if (task.subject_type === "identity_change_proposal") {
+      setIdentityChange(await getIdentityChange(task.subject_id));
     } else {
       setCandidate(await getCandidate(task.subject_id));
     }
@@ -222,18 +229,23 @@ function ReviewPanel() {
       selected.task_id, choice, choice === "existing" ? existingId : undefined);
     if (selected.task_type === "multi_target" && decision.status !== "pending") {
       await applyMultiTargetReview(selected.task_id);
+    } else if (selected.subject_type === "identity_change_proposal"
+        && decision.status !== "pending") {
+      await applyIdentityChange(selected.task_id);
     }
     setMessage("本次投票已追加保存；其他审核人的未完成票仍不可见。");
-    setSelected(null); setCandidate(null); setCooccurrence(null); await refresh();
+    setSelected(null); setCandidate(null); setCooccurrence(null);
+    setIdentityChange(null); await refresh();
   }
   return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">BLIND REVIEW</p><h2>独立审核中心</h2></div><span className="pill">{tasks.length} 待处理</span></div>
     {message && <p className="success">{message}</p>}
-    <div className="review-layout"><div className="data-list compact">{tasks.map((task) => <button className="task-row" key={task.task_id} onClick={() => open(task)}><strong>{task.task_type === "cluster_purity" ? "批内簇纯度" : task.task_type === "multi_target" ? "多目标真实性" : "历史身份匹配"}</strong><span>{task.subject_id.slice(0, 12)}…</span></button>)}</div>
+    <div className="review-layout"><div className="data-list compact">{tasks.map((task) => <button className="task-row" key={task.task_id} onClick={() => open(task)}><strong>{task.task_type === "cluster_purity" ? "批内簇纯度" : task.task_type === "multi_target" ? "多目标真实性" : task.task_type === "identity_merge" ? "身份合并" : task.task_type === "identity_split" ? "身份拆分" : task.task_type === "observation_withdrawal" ? "撤回照片" : "历史身份匹配"}</strong><span>{task.subject_id.slice(0, 12)}…</span></button>)}</div>
       {candidate && selected && <div className="review-detail"><h3>{candidate.label}</h3><div className="crop-grid">{candidate.crops.map((crop) => <img key={crop.crop_id} src={crop.media_url} alt="海豚 Crop" />)}</div>
         {candidate.matches.length > 0 && <div className="matches">{candidate.matches.map((match) => <label key={match.individual_id}><input type="radio" name="existing" onChange={() => setExistingId(match.individual_id)} />#{match.rank} {match.individual_id.slice(0, 8)} · {match.score.toFixed(3)} · {match.support_frames} 帧</label>)}</div>}
         <div className="actions">{selected.task_type === "cluster_purity" ? <><button onClick={() => vote("confirm_cluster")}>确认候选组</button><button className="secondary" onClick={() => vote("split_required")}>需要拆簇</button><button className="danger" onClick={() => vote("unusable")}>不可用</button></> : <><button disabled={!existingId} onClick={() => vote("existing")}>选择 Existing</button><button className="secondary" onClick={() => vote("new")}>选择 New</button><button className="quiet-dark" onClick={() => vote("uncertain")}>不确定</button></>}</div>
       </div>}
-      {cooccurrence && selected && <div className="review-detail"><h3>是否确为同一张原图中的多个个体？</h3><p className="muted">只确认多目标事实，不判断亲缘关系。三个审核人的投票彼此独立。</p><div className="crop-grid">{cooccurrence.crops.map((crop) => <img key={crop.crop_id} src={crop.media_url} alt={`目标 ${crop.crop_index + 1}`} />)}</div><div className="actions"><button onClick={() => vote("confirm_multi_target")}>确认多目标</button><button className="danger" onClick={() => vote("reject")}>驳回</button><button className="quiet-dark" onClick={() => vote("uncertain")}>不确定</button></div></div>}</div>
+      {cooccurrence && selected && <div className="review-detail"><h3>是否确为同一张原图中的多个个体？</h3><p className="muted">只确认多目标事实，不判断亲缘关系。三个审核人的投票彼此独立。</p><div className="crop-grid">{cooccurrence.crops.map((crop) => <img key={crop.crop_id} src={crop.media_url} alt={`目标 ${crop.crop_index + 1}`} />)}</div><div className="actions"><button onClick={() => vote("confirm_multi_target")}>确认多目标</button><button className="danger" onClick={() => vote("reject")}>驳回</button><button className="quiet-dark" onClick={() => vote("uncertain")}>不确定</button></div></div>}
+      {identityChange && selected && <div className="review-detail"><h3>{identityChange.change_type === "merge" ? "身份合并方案" : identityChange.change_type === "split" ? "身份拆分方案" : "照片撤回方案"}</h3><p className="muted">方案摘要 {identityChange.plan_digest.slice(0, 16)}…；必须三人选择完全相同的结论，任何分歧都不会修改正式身份。</p><pre className="plan-preview">{JSON.stringify(identityChange.plan, null, 2)}</pre><div className="actions"><button onClick={() => vote("approve_change")}>批准此方案</button><button className="danger" onClick={() => vote("reject")}>驳回</button><button className="quiet-dark" onClick={() => vote("uncertain")}>不确定</button></div></div>}</div>
   </section>;
 }
 

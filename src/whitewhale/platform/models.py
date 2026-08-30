@@ -636,6 +636,12 @@ class Observation(TimestampMixin, Base):
     observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source_review_task_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("review_tasks.id", ondelete="RESTRICT"), nullable=False)
+    state: Mapped[str] = mapped_column(
+        String(32), default="active", nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('active', 'withdrawn')", name="valid_state"),
+    )
 
 
 class IdentityEvent(Base):
@@ -648,6 +654,46 @@ class IdentityEvent(Base):
         ForeignKey("review_tasks.id", ondelete="RESTRICT"),
         unique=True, nullable=False)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class IdentityChangeProposal(TimestampMixin, Base):
+    __tablename__ = "identity_change_proposals"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    change_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    plan: Mapped[dict] = mapped_column(JSON, nullable=False)
+    plan_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), default="review_pending", nullable=False)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint(
+            "change_type IN ('merge', 'split', 'withdrawal')",
+            name="valid_change_type",
+        ),
+        CheckConstraint(
+            "status IN ('review_pending', 'applied', 'rejected', 'disputed')",
+            name="valid_status",
+        ),
+    )
+
+
+class IdentityChangeEvent(Base):
+    __tablename__ = "identity_change_events"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    proposal_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("identity_change_proposals.id", ondelete="RESTRICT"),
+        unique=True, nullable=False)
+    review_task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("review_tasks.id", ondelete="RESTRICT"),
+        unique=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)

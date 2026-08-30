@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, aliased, sessionmaker
 
 from .models import (
@@ -15,6 +15,7 @@ from .models import (
     CooccurrenceMember,
     Crop,
     Image,
+    IdentityChangeProposal,
     IndividualAlias,
     MatchCandidate,
     Observation,
@@ -182,13 +183,33 @@ class ArchiveReadService:
                 "created_at": hypothesis.created_at.isoformat(),
             } for hypothesis, low_name, high_name, evidence_count in rows]
 
+    def identity_change(self, proposal_id: uuid.UUID) -> dict:
+        with self._sessions() as db:
+            proposal = db.get(IdentityChangeProposal, proposal_id)
+            if proposal is None:
+                raise ValueError("身份更正方案不存在")
+            return {
+                "proposal_id": str(proposal.id),
+                "change_type": proposal.change_type,
+                "status": proposal.status,
+                "plan": proposal.plan,
+                "plan_digest": proposal.plan_digest,
+                "created_by_user_id": str(proposal.created_by_user_id),
+                "created_at": proposal.created_at.isoformat(),
+                "applied_at": proposal.applied_at.isoformat()
+                if proposal.applied_at else None,
+            }
+
     def individuals(self) -> list[dict]:
         with self._sessions() as db:
             rows = list(db.execute(
                 select(ConfirmedIndividual, func.count(Observation.id))
                 .outerjoin(
                     Observation,
-                    Observation.individual_id == ConfirmedIndividual.id,
+                    and_(
+                        Observation.individual_id == ConfirmedIndividual.id,
+                        Observation.state == "active",
+                    ),
                 )
                 .group_by(ConfirmedIndividual.id)
                 .order_by(ConfirmedIndividual.display_name)
@@ -227,6 +248,7 @@ class ArchiveReadService:
                     "media_url": f"/api/media/crops/{crop.id}",
                     "side": observation.side,
                     "quality": observation.quality,
+                    "state": observation.state,
                     "observed_at": observation.observed_at.isoformat()
                     if observation.observed_at else None,
                 } for observation, crop in observations],

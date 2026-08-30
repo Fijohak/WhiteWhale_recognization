@@ -151,6 +151,26 @@ class TestCatalogLifecycle(unittest.TestCase):
             self.assertEqual(results[0].calibration_status,
                              "provisional_unvalidated")
 
+            with self.sessions.begin() as db:
+                db.get(Observation, self.observation_ids[0]).individual_id = \
+                    self.individual_ids[1]
+                db.get(Observation, self.observation_ids[1]).state = "withdrawn"
+            remapped = service.search(
+                np.asarray([1.0, 0.0], dtype=np.float32), k=2)
+            self.assertEqual(
+                [item.individual_id for item in remapped],
+                [self.individual_ids[1]],
+            )
+            self.assertEqual(remapped[0].support_frames, 2)
+            with self.assertRaisesRegex(
+                    CatalogValidationError, "active Observation"):
+                service.stage(
+                    entries,
+                    model_version="reid-r4",
+                    calibration_status="provisional_unvalidated",
+                    index_bytes=build_flat_ip_index(vectors),
+                )
+
             with self.sessions() as db:
                 path = layout.resolve(
                     "catalog_versions",

@@ -37,6 +37,7 @@ from .auth import (
 from .catalogs import CatalogService, CatalogSnapshot, CatalogValidationError
 from .cooccurrence import CooccurrenceService
 from .imports import BatchImportService
+from .identity_changes import IdentityChangeService
 from .jobs import InvalidLease, JobConflict, JobQueueService, LeaseService
 from .media import MediaNotFound, MediaService
 from .review_policy import ReviewVote
@@ -88,6 +89,7 @@ class PlatformServices:
     views: ArchiveReadService | None = None
     archival_dispatch: ArchivalDispatchService | None = None
     cooccurrence: CooccurrenceService | None = None
+    identity_changes: IdentityChangeService | None = None
 
 
 class _StrictModel(BaseModel):
@@ -193,6 +195,28 @@ class CooccurrenceCreateRequest(_StrictModel):
     crop_ids: list[uuid.UUID] = Field(min_length=2)
     reviewer_ids: list[uuid.UUID]
     provenance_artifact_id: uuid.UUID | None = None
+
+
+class IdentityMergeRequest(_StrictModel):
+    source_individual_ids: list[uuid.UUID] = Field(min_length=2)
+    target_individual_id: uuid.UUID
+    reviewer_ids: list[uuid.UUID]
+
+
+class IdentitySplitAssignmentRequest(_StrictModel):
+    observation_id: uuid.UUID
+    group: str = Field(min_length=1, max_length=128)
+
+
+class IdentitySplitRequest(_StrictModel):
+    source_individual_id: uuid.UUID
+    assignments: list[IdentitySplitAssignmentRequest] = Field(min_length=2)
+    reviewer_ids: list[uuid.UUID]
+
+
+class ObservationWithdrawalRequest(_StrictModel):
+    observation_ids: list[uuid.UUID] = Field(min_length=1)
+    reviewer_ids: list[uuid.UUID]
 
 
 def _default_readiness_probe() -> Readiness:
@@ -524,6 +548,15 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
             current_principal(request)
             return services.views.relationships()
 
+        @app.get("/api/identity-changes/{proposal_id}")
+        def get_identity_change(proposal_id: uuid.UUID, request: Request):
+            current_principal(request)
+            try:
+                return services.views.identity_change(proposal_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
         @app.get("/api/individuals")
         def list_individuals(request: Request):
             current_principal(request)
@@ -810,6 +843,95 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
             return {"hypothesis_ids": [str(value) for value in hypothesis_ids]}
+
+    if services.identity_changes is not None:
+        @app.post(
+            "/api/identity-changes/merge",
+            status_code=status.HTTP_201_CREATED,
+        )
+        def create_identity_merge(
+            body: IdentityMergeRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_workflow_role(principal)
+            try:
+                proposal_id, task_id = services.identity_changes.create_merge(
+                    body.source_individual_ids,
+                    target_individual_id=body.target_individual_id,
+                    reviewer_ids=body.reviewer_ids,
+                    actor_user_id=principal.user_id,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"proposal_id": str(proposal_id), "task_id": str(task_id)}
+
+        @app.post(
+            "/api/identity-changes/split",
+            status_code=status.HTTP_201_CREATED,
+        )
+        def create_identity_split(
+            body: IdentitySplitRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_workflow_role(principal)
+            try:
+                assignments = {
+                    item.observation_id: item.group for item in body.assignments
+                }
+                if len(assignments) != len(body.assignments):
+                    raise ValueError("拆分方案包含重复 Observation")
+                proposal_id, task_id = services.identity_changes.create_split(
+                    body.source_individual_id,
+                    assignments=assignments,
+                    reviewer_ids=body.reviewer_ids,
+                    actor_user_id=principal.user_id,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"proposal_id": str(proposal_id), "task_id": str(task_id)}
+
+        @app.post(
+            "/api/identity-changes/withdrawal",
+            status_code=status.HTTP_201_CREATED,
+        )
+        def create_observation_withdrawal(
+            body: ObservationWithdrawalRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_workflow_role(principal)
+            try:
+                proposal_id, task_id = \
+                    services.identity_changes.create_withdrawal(
+                        body.observation_ids,
+                        reviewer_ids=body.reviewer_ids,
+                        actor_user_id=principal.user_id,
+                    )
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"proposal_id": str(proposal_id), "task_id": str(task_id)}
+
+        @app.post("/api/reviews/tasks/{task_id}/apply-identity-change")
+        def apply_identity_change(
+            task_id: uuid.UUID,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_workflow_role(principal)
+            try:
+                result = services.identity_changes.apply_review(task_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {
+                "proposal_id": str(result.proposal_id),
+                "status": result.status,
+                "created_individual_ids": [
+                    str(value) for value in result.created_individual_ids],
+                "affected_observation_ids": [
+                    str(value) for value in result.affected_observation_ids],
+            }
 
     if all((services.worker_auth, services.jobs,
             services.leases, services.results)):

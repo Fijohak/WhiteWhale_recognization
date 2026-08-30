@@ -174,7 +174,8 @@ class CooccurrenceService:
                 for crop_id, individual_id in db.execute(
                     select(Observation.crop_id, Observation.individual_id)
                     .where(Observation.crop_id.in_([
-                        member.crop_id for member in members]))
+                        member.crop_id for member in members]),
+                        Observation.state == "active")
                 )
             }
             if len(observation_map) != len(members):
@@ -202,6 +203,13 @@ class CooccurrenceService:
                     db.add(RelationshipEvent(
                         hypothesis_id=hypothesis.id,
                         event_type="suspected_from_cooccurrence",
+                        payload={"cooccurrence_event_id": str(event_id)},
+                    ))
+                elif hypothesis.status == "evidence_insufficient":
+                    hypothesis.status = "suspected"
+                    db.add(RelationshipEvent(
+                        hypothesis_id=hypothesis.id,
+                        event_type="revalidated_from_cooccurrence",
                         payload={"cooccurrence_event_id": str(event_id)},
                     ))
                 evidence = db.scalar(select(RelationshipEvidence).where(
@@ -246,7 +254,8 @@ class CooccurrenceService:
                         CooccurrenceMember.event_id == event_id)))
                 identities = list(db.scalars(select(
                     Observation.individual_id).where(
-                        Observation.crop_id.in_(member_crop_ids))))
+                        Observation.crop_id.in_(member_crop_ids),
+                        Observation.state == "active")))
                 if len(identities) == len(member_crop_ids) \
                         and len(set(identities)) >= 2:
                     ready.append(event_id)

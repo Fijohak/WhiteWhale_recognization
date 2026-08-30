@@ -674,10 +674,10 @@ checksums.sha256
 
 - [x] **建立基础工程与数据边界**：新增 TypeScript Web、FastAPI API/领域层、Worker 包、Docker Compose、Caddy、Alembic 和宿主机目录初始化；保持现有算法模块与 CLI 可运行。
 - [ ] **实现 PostgreSQL 领域模型与迁移**：按采集、任务、候选、审核、身份、Catalog、集合/共现、训练/模型分组建表，加入 UUID、唯一性、不可变事件和活动指针约束。
-- [ ] **实现账号、角色、文件库与分片上传**：完成应用登录、设备令牌、媒体授权、32 MiB 分片续传、标准/任意目录导入和 Manifest 校验。
-- [ ] **实现分布式 Job/Worker 控制面**：完成注册、能力匹配、原子租约、心跳、重试、幂等完成、迟到结果拒绝、Artifact staging 与完整性验证。
-- [ ] **接入批内归档与两阶段审核**：封装现有检测、Crop、Embedding、HDBSCAN 和历史 Top-K；实现普通簇、多目标和跨时间身份审核政策。
-- [ ] **实现正式个体、共现、疑似关系与不可变 Catalog**：完成 Observation、Identity Event、`nn_relationship`、N 目标关系、Faiss 构建、原子激活和回滚。
+- [x] **实现账号、角色、文件库与分片上传**：完成应用登录、设备令牌、媒体授权、32 MiB 分片续传、标准/任意目录导入和 Manifest 校验。
+- [x] **实现分布式 Job/Worker 控制面**：完成注册、能力匹配、原子租约、心跳、重试、幂等完成、迟到结果拒绝、Artifact staging 与完整性验证。
+- [x] **接入批内归档与两阶段审核**：封装现有检测、Crop、Embedding、HDBSCAN 和历史 Top-K；实现普通簇、多目标和跨时间身份审核政策。
+- [x] **实现正式个体、共现、疑似关系与不可变 Catalog**：完成 Observation、Identity Event、`nn_relationship`、N 目标关系、Faiss 构建、原子激活和回滚。
 - [ ] **实现训练与模型生命周期**：完成 Dataset Version/Split 门禁、Detector/Re-ID Training Job、Checkpoint 恢复、评估比较、阈值标定和 Production Promotion。
 - [ ] **迁移并核验现有产物**：导入当前 Manifest、审核 CSV、r4 权重、Gallery 和 Artifact provenance；保持阈值未校准警告，不猜测跨批身份。
 - [ ] **完成部署、离线交付与安全更新**：提供 Compose、LAN/Tailscale 配置、systemd 三分钟分支部署、健康检查、release 回退、离线安装包和手动一致性导出/恢复。

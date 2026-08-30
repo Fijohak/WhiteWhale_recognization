@@ -20,6 +20,7 @@ from .models import (
     CatalogEvent,
     CatalogMembership,
     CatalogVersion,
+    ConfirmedIndividual,
     Observation,
 )
 from .storage import StorageLayout
@@ -109,10 +110,20 @@ class CatalogService:
         with self._sessions() as db:
             observations = {
                 item.id: item for item in db.scalars(
-                    select(Observation).where(Observation.id.in_(observation_ids)))
+                    select(Observation)
+                    .join(
+                        ConfirmedIndividual,
+                        ConfirmedIndividual.id == Observation.individual_id,
+                    )
+                    .where(
+                        Observation.id.in_(observation_ids),
+                        Observation.state == "active",
+                        ConfirmedIndividual.state == "active",
+                    ))
             }
         if set(observations) != set(observation_ids):
-            raise CatalogValidationError("Catalog 引用了不存在的 Observation")
+            raise CatalogValidationError(
+                "Catalog 只能引用存在且归属 active 身份的 active Observation")
 
         catalog_id = uuid.uuid4()
         memberships = []
@@ -273,6 +284,22 @@ class CatalogService:
                 .where(CatalogMembership.catalog_id == active.catalog_id)
                 .order_by(CatalogMembership.row_index)
             ))
+            current_individuals = {
+                observation_id: individual_id
+                for observation_id, individual_id in db.execute(
+                    select(Observation.id, Observation.individual_id)
+                    .join(
+                        ConfirmedIndividual,
+                        ConfirmedIndividual.id == Observation.individual_id,
+                    )
+                    .where(
+                        Observation.id.in_([
+                            item.observation_id for item in memberships]),
+                        Observation.state == "active",
+                        ConfirmedIndividual.state == "active",
+                    )
+                )
+            }
             snapshot = (
                 active.catalog_id, active.model_version,
                 active.calibration_status, active.feature_dim,
@@ -291,7 +318,10 @@ class CatalogService:
             if row_index < 0:
                 continue
             membership = memberships[int(row_index)]
-            value = grouped.setdefault(membership.individual_id, {
+            individual_id = current_individuals.get(membership.observation_id)
+            if individual_id is None:
+                continue
+            value = grouped.setdefault(individual_id, {
                 "score": float(score),
                 "observation_id": membership.observation_id,
                 "support_frames": 0,

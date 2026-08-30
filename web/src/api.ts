@@ -53,6 +53,13 @@ export type ReviewDecision = {
   flags: string[];
 };
 
+export type IdentityChange = {
+  proposal_id: string;
+  change_type: "merge" | "split" | "withdrawal";
+  status: string; plan: Record<string, unknown>; plan_digest: string;
+  created_by_user_id: string; created_at: string; applied_at: string | null;
+};
+
 export type Individual = {
   individual_id: string; display_name: string; state: string;
   flags: string[]; observation_count: number;
@@ -206,6 +213,12 @@ export async function getCooccurrence(eventId: string): Promise<Cooccurrence> {
   return parse(await fetch(`/api/cooccurrences/${eventId}`, { credentials: "include" }));
 }
 
+export async function getIdentityChange(proposalId: string): Promise<IdentityChange> {
+  return parse(await fetch(`/api/identity-changes/${proposalId}`, {
+    credentials: "include"
+  }));
+}
+
 export async function submitVote(
   taskId: string, choice: string, individualId?: string
 ): Promise<ReviewDecision> {
@@ -218,6 +231,12 @@ export async function submitVote(
 
 export async function applyMultiTargetReview(taskId: string): Promise<{ event_id: string }> {
   return parse(await fetch(`/api/reviews/tasks/${taskId}/apply-multi-target`, {
+    method: "POST", credentials: "include", headers: writeHeaders()
+  }));
+}
+
+export async function applyIdentityChange(taskId: string): Promise<{ proposal_id: string; status: string }> {
+  return parse(await fetch(`/api/reviews/tasks/${taskId}/apply-identity-change`, {
     method: "POST", credentials: "include", headers: writeHeaders()
   }));
 }

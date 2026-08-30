@@ -10,6 +10,7 @@ _CHOICES = frozenset({
     "confirm_cluster", "reject", "uncertain", "split_required", "unusable",
     "existing", "new",
     "confirm_multi_target",
+    "approve_change",
 })
 
 
@@ -99,6 +100,25 @@ def decide_multi_target(votes: list[ReviewVote]) -> ReviewDecision:
         return ReviewDecision("resolved", "multi_target_confirmed")
     if counts["reject"] >= 2:
         return ReviewDecision("resolved", "multi_target_rejected")
+    return ReviewDecision(
+        "conflict", "uncertain",
+        flags=frozenset({"manual_resolution_required"}),
+    )
+
+
+def decide_identity_change(votes: list[ReviewVote]) -> ReviewDecision:
+    if len(votes) < 3:
+        return ReviewDecision("pending")
+    if len(votes) > 3:
+        raise ValueError("身份更正审核固定为 3 名审核人")
+    allowed = {"approve_change", "reject", "uncertain"}
+    if any(vote.choice not in allowed for vote in votes):
+        raise ValueError("身份更正审核包含非法选项")
+    choices = {vote.choice for vote in votes}
+    if choices == {"approve_change"}:
+        return ReviewDecision("resolved", "identity_change_approved")
+    if choices == {"reject"}:
+        return ReviewDecision("resolved", "identity_change_rejected")
     return ReviewDecision(
         "conflict", "uncertain",
         flags=frozenset({"manual_resolution_required"}),

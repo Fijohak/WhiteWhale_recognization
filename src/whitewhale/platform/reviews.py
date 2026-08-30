@@ -20,6 +20,7 @@ from .review_policy import (
     ReviewDecision,
     ReviewVote,
     decide_cluster_purity,
+    decide_identity_change,
     decide_identity_match,
     decide_multi_target,
 )
@@ -29,6 +30,9 @@ _POLICIES = {
     "cluster_purity": (1, decide_cluster_purity),
     "identity_match": (3, decide_identity_match),
     "multi_target": (3, decide_multi_target),
+    "identity_merge": (3, decide_identity_change),
+    "identity_split": (3, decide_identity_change),
+    "observation_withdrawal": (3, decide_identity_change),
 }
 _POLICY_VERSION = "review-policy-v1"
 
