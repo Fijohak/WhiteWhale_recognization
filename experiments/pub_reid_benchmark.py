@@ -9,8 +9,8 @@
 - 输出指标与候选结果，全部可追溯（保留 image_id / 原路径 / identity / split）。
 
 用法示例：
-    python scripts/pub_reid_benchmark.py --dataset happywhale --model megadescriptor
-    python scripts/pub_reid_benchmark.py --dataset happywhale --model dinov2 --mock
+    python experiments/pub_reid_benchmark.py --dataset happywhale --model megadescriptor
+    python experiments/pub_reid_benchmark.py --dataset happywhale --model dinov2 --mock
 """
 import argparse
 import json
@@ -20,8 +20,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from pub_reid.dataset.happywhale import HappywhaleAdapter  # noqa: E402
 from whitewhale.reid.embedding import (  # noqa: E402
@@ -125,7 +126,7 @@ def main():
     parser.add_argument("--cache-images", action="store_true",
                         help="把 parquet 内嵌图片落盘到 data-root/images（首次运行用）")
     parser.add_argument("--out", type=Path,
-                        default=Path(__file__).resolve().parents[2] / "outputs" / "pub_reid")
+                        default=REPO_ROOT / "outputs" / "pub_reid")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--k", type=int, default=10)
     parser.add_argument("--max-query", type=int, default=0,

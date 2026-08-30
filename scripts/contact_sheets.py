@@ -1,8 +1,8 @@
 """
-拼图（contact sheet）生成（正式辅助工具）：Anchor 组版 + 候选簇版。
+拼图（contact sheet）生成（正式辅助工具）：已确认个体组版 + 候选簇版。
 
 用法：
-    python scripts/contact_sheets.py                       # 默认 Anchor 组
+    python scripts/contact_sheets.py                       # 默认已确认个体组
     python scripts/contact_sheets.py --cluster            # 按 HDBSCAN 候选簇分组
 
 真实运行需要图片根（src_dataset）；--mock 生成占位色块验证布局逻辑。
@@ -19,23 +19,32 @@ from whitewhale.review.contact_sheets import (  # noqa: E402
     build_cluster_contact_sheets, build_contact_sheets)
 
 
+def _repo_path(path: Path) -> Path:
+    """CLI/配置相对路径统一按仓库根解析。"""
+    return path if path.is_absolute() else REPO_ROOT / path
+
+
 def main():
-    base = REPO_ROOT / "outputs"
     cfg = load_config("pipeline")
+    base = _repo_path(Path(cfg.get("output_root", "outputs")))
+    data_root = _repo_path(Path(cfg.get("data_root", "src_dataset")))
     parser = argparse.ArgumentParser(description="生成候选照片拼图（人工审核辅助）")
     parser.add_argument("--pilot", type=Path, default=base / "pilot" / "pilot_set.csv",
-                        help="Anchor 组清单（默认模式）")
+                        help="批次内已确认个体清单（默认模式）")
     parser.add_argument("--clusters", type=Path, default=base / "clusters" / "clusters.csv",
                         help="候选簇照片表（--cluster 模式）")
     parser.add_argument("--images-root", type=Path,
-                        default=Path(cfg.get("data_root", "src_dataset")),
+                        default=data_root,
                         help="图片根目录（含 01/ 03/ 子目录）")
     parser.add_argument("--cluster", action="store_true",
-                        help="按 HDBSCAN 候选簇分组（默认按 Anchor 组）")
+                        help="按 HDBSCAN 候选簇分组（默认按已确认个体组）")
     parser.add_argument("--out", type=Path, default=base / "contact_sheets")
     parser.add_argument("--mock", action="store_true", help="mock 模式（占位色块，不读图）")
     parser.add_argument("--max-sheets", type=int, default=200)
     args = parser.parse_args()
+
+    for field in ("pilot", "clusters", "images_root", "out"):
+        setattr(args, field, _repo_path(Path(getattr(args, field))))
 
     if args.cluster:
         build_cluster_contact_sheets(args.clusters, args.out, args.images_root,

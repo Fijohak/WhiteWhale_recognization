@@ -1,6 +1,6 @@
 """
 人工评估集划分草案（正式入口，待办 3.2）：
-确认个体表 → 按 Sequence 自动划分 query/gallery 草案。
+确认个体表 → 按完整连拍串自动划分 query/gallery 草案。
 
 用法：
     python scripts/build_eval_set.py \
@@ -31,7 +31,7 @@ def main():
                         help="人工确认个体表（status=confirmed 行）")
     parser.add_argument("--manifest", type=Path,
                         default=Path("outputs/index/dataset_manifest.csv"),
-                        help="数据清单（取 sequence_guess / session_id 等）")
+                        help="数据清单（由 filename + session_id 计算完整 series）")
     parser.add_argument("--out", type=Path, default=Path("outputs/index"),
                         help="输出目录")
     args = parser.parse_args()

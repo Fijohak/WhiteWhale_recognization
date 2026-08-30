@@ -16,15 +16,42 @@ import pandas as pd  # noqa: E402
 
 from experiments.eval51_common import (  # noqa: E402
     load_data, same_series, score_img_to_individual, split_probe_gallery)
+from whitewhale.config import load_config  # noqa: E402
+from whitewhale.data.image_store import ImageStore  # noqa: E402
 
-IMAGES_ROOT = Path("I:/")
+
+def resolve_data_root(config: dict | None = None) -> Path:
+    """读取统一配置的数据根；相对路径始终锚定仓库根。"""
+    cfg = load_config("pipeline") if config is None else config
+    root = Path(cfg.get("data_root", "src_dataset"))
+    return root if root.is_absolute() else REPO_ROOT / root
+
+
+IMAGE_STORE = ImageStore(resolve_data_root())
+
+
+def best_gallery_image_for_identity(
+    query_embedding: np.ndarray,
+    embeddings: np.ndarray,
+    gallery_idx: np.ndarray,
+    gallery_identities: np.ndarray,
+    identity: str,
+) -> int:
+    """返回指定 Top-1 个体中相似度最高的实际 gallery 图片索引。"""
+    candidate_positions = np.flatnonzero(gallery_identities == identity)
+    if not len(candidate_positions):
+        raise ValueError(f"gallery 中不存在候选个体: {identity}")
+    candidate_idx = gallery_idx[candidate_positions]
+    best_position = int(np.argmax(query_embedding @ embeddings[candidate_idx].T))
+    return int(candidate_idx[best_position])
 
 
 def img_uri(row) -> str:
     """原图 file:// URI（meta.relative_path 不含 session 前缀时补上）。"""
-    p = IMAGES_ROOT / str(row["relative_path"])
+    rel_path = str(row["relative_path"])
+    p = IMAGE_STORE.resolve(rel_path)
     if not p.exists():
-        p = IMAGES_ROOT / f"{row['session_id']}/{row['relative_path']}"
+        p = IMAGE_STORE.resolve(f"{row['session_id']}/{rel_path}")
     return p.as_uri() if p.exists() else ""
 
 
@@ -51,10 +78,11 @@ def main():
         for qi in q_idx:
             per_img = score_img_to_individual(emb[qi], emb, gal_idx, gal_ind)
             top_ind = max(per_img, key=per_img.get)
-            sims = emb[qi] @ emb[gal_idx].T
-            top_pos = int(np.argmax(sims))
-            top_row = meta.loc[gal_idx[top_pos]]
-            same = same_series(int(meta.loc[qi, "frame"]), int(top_row["frame"]))
+            top_image_idx = best_gallery_image_for_identity(
+                emb[qi], emb, gal_idx, gal_ind, top_ind)
+            top_row = meta.loc[top_image_idx]
+            same = same_series(str(meta.loc[qi, "series_id"]),
+                               str(top_row["series_id"]))
             hit = top_ind == target
             stats["rows"] += 1
             if hit:

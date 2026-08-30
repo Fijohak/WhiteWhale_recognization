@@ -18,7 +18,19 @@ from pathlib import Path
 import pandas as pd
 from PIL import Image
 
-from whitewhale.data.image_store import ImageStore
+from whitewhale.data.image_store import ImageStore, validate_safe_image_ids
+from whitewhale.data.manifest import compute_sha256
+
+YOLO_FALLBACK_POLICY = "center_square_min_side_0.45"
+
+
+def resolve_yolo_device(device: str | int | None) -> str | int | None:
+    """把项目的 ``auto`` 设备值转换为 Ultralytics 的自动选择语义。"""
+    if device is None:
+        return None
+    if isinstance(device, str) and device.strip().lower() in {"", "auto"}:
+        return None
+    return device
 
 
 def expand_box(x0: float, y0: float, x1: float, y1: float,
@@ -42,9 +54,36 @@ def expand_box(x0: float, y0: float, x1: float, y1: float,
     return [x0, y0, x1 - x0, y1 - y0]
 
 
+def center_fallback_box(w: int, h: int, ratio: float = 0.45) -> list[int]:
+    """返回检测失败时的中心正方形回退框，与离线裁剪保持同一语义。"""
+    side = max(1, int(min(w, h) * ratio))
+    left, top = (w - side) // 2, (h - side) // 2
+    return [left, top, side, side]
+
+
+def yolo_crop_provenance(weights: Path, conf: float, imgsz: int,
+                         pad_x: float, pad_up: float, pad_down: float) -> dict:
+    """生成可核对的 YOLO 裁剪配置，供 embedding config 与查询端比较。"""
+    weights = Path(weights)
+    if not weights.is_file():
+        raise FileNotFoundError(f"检测器权重不存在：{weights}")
+    return {
+        "crop": "yolo",
+        "crop_schema_version": 1,
+        "detector_checkpoint_file": str(weights.resolve()),
+        "detector_checkpoint_sha256": compute_sha256(weights),
+        "detector_conf": float(conf),
+        "detector_imgsz": int(imgsz),
+        "detector_pad_x": float(pad_x),
+        "detector_pad_up": float(pad_up),
+        "detector_pad_down": float(pad_down),
+        "detector_fallback_policy": YOLO_FALLBACK_POLICY,
+    }
+
+
 def detect_and_crop(df: pd.DataFrame, images_root: Path, out_dir: Path,
                     weights: Path, conf: float = 0.25, imgsz: int = 1024,
-                    device: str = "cuda", pad_x: float = 0.30,
+                    device: str | int | None = "auto", pad_x: float = 0.30,
                     pad_up: float = 0.15, pad_down: float = 0.60,
                     preview: bool = True) -> pd.DataFrame:
     """逐图 YOLO 检测 + 非均匀扩展裁剪；未检出回退中心 0.45 窗。
@@ -60,24 +99,36 @@ def detect_and_crop(df: pd.DataFrame, images_root: Path, out_dir: Path,
         裁剪清单 DataFrame（image_id / relative_path / session_id /
         x / y / w / h / det_conf / fallback），行序与输入一致。
     """
+    if "image_id" not in df.columns or "relative_path" not in df.columns:
+        raise ValueError("检测清单必须包含 image_id 和 relative_path")
+    validate_safe_image_ids(df["image_id"])
+    store = ImageStore(images_root)
+    sources = [store.resolve(path) for path in df["relative_path"]]
+    missing = [
+        (str(image_id), str(path))
+        for image_id, path in zip(df["image_id"], sources)
+        if not path.is_file()
+    ]
+    if missing:
+        raise FileNotFoundError(
+            f"检测清单有 {len(missing)} 张原图不存在，已在检测前终止；"
+            f"示例: image_id={missing[0][0]!r}, path={missing[0][1]}")
+
     from ultralytics import YOLO
 
     model = YOLO(str(weights))
+    yolo_device = resolve_yolo_device(device)
     out_dir.mkdir(parents=True, exist_ok=True)
     preview_dir = out_dir / "detect_preview"
     if preview:
         preview_dir.mkdir(parents=True, exist_ok=True)
 
     rows, failures = [], []
-    store = ImageStore(images_root)
     for i, r in df.iterrows():
         src = store.resolve(r["relative_path"])
-        if not src.exists():
-            failures.append((r["image_id"], "原图不存在"))
-            continue
         img = store.open(r["relative_path"])
         w, h = img.size
-        res = model.predict(str(src), conf=conf, imgsz=imgsz, device=device,
+        res = model.predict(str(src), conf=conf, imgsz=imgsz, device=yolo_device,
                             verbose=False)
         if len(res) and len(res[0].boxes):
             b = res[0].boxes[0]  # 最高置信度框（ultralytics 已按 conf 排序）
@@ -95,9 +146,7 @@ def detect_and_crop(df: pd.DataFrame, images_root: Path, out_dir: Path,
                 vis.save(preview_dir / f"{r['image_id']}.jpg")
         else:
             # 回退：中心裁剪（0.45 窗，与历史 crop_center.py 语义一致）
-            side = int(min(w, h) * 0.45)
-            left, top = (w - side) // 2, (h - side) // 2
-            box = [left, top, side, side]
+            box = center_fallback_box(w, h)
             conf_det, fallback = 0.0, True
             failures.append((r["image_id"], "未检出→中心裁剪回退"))
         crop = img.crop((box[0], box[1], box[0] + box[2], box[1] + box[3]))

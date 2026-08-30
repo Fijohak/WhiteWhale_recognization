@@ -22,15 +22,21 @@ import json
 import sys
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT))
 
 from experiments.eval51_common import (  # noqa: E402
-    load_data, score_img_to_individual, split_probe_gallery_series)
+    evaluate_probe_clusters,
+    load_data,
+    split_probe_gallery_series,
+    summarize_probe_clusters,
+)
+
+
+def format_metric(value) -> str:
+    """把空分组指标显示为 N/A，避免无该类 session 时格式化崩溃。"""
+    return "N/A" if value is None else f"{float(value):.3f}"
 
 
 def main():
@@ -43,58 +49,42 @@ def main():
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--seed", type=int, default=7)
     args = ap.parse_args()
+    if args.k < 1:
+        ap.error("--k 必须为正整数")
 
     meta, emb = load_data(base, stem=args.feats_stem)
     q_rows, gal_idx, gal_ind, info = split_probe_gallery_series(
         meta, emb, seed=args.seed)
 
-    # ---- 逐个体评估（同常规口径，但库中无同串候选） ----
-    records = []
-    for target, q_idx in q_rows.items():
-        per_img = [score_img_to_individual(emb[i], emb, gal_idx, gal_ind)
-                   for i in q_idx]
-        all_g = sorted(per_img[0].keys())
-        cluster = {g: float(np.mean([s[g] for s in per_img])) for g in all_g}
-        top = sorted(cluster, key=cluster.get, reverse=True)
-        hit_rank = next((r for r, g in enumerate(top[: args.k], 1)
-                         if g == target), 0)
-        records.append({
-            "individual": target,
-            "session": str(meta.loc[q_idx[0], "session_id"]),
-            "n_query": int(len(q_idx)),
-            "single_r1": float(np.mean([max(s, key=s.get) == target
-                                        for s in per_img])),
-            "cluster_r1": int(top[0] == target),
-            "cluster_r5": int(0 < hit_rank <= 5),
-            "ap": float(1.0 / hit_rank) if hit_rank else 0.0,
-        })
-    df = pd.DataFrame(records)
+    # 两个 E5 入口共用同一评估函数：同 session 隔离 + 完整同串剔除。
+    df = evaluate_probe_clusters(
+        meta, emb, q_rows, gal_idx, gal_ind, reciprocal_rank_k=args.k)
 
-    def summarize(sub, name):
-        if len(sub) == 0:
-            return {"n_probe_clusters": 0}
-        return {
-            "n_probe_clusters": int(len(sub)),
-            "n_query_images": int(sub["n_query"].sum()),
-            "n_gallery_images": int(len(gal_idx)),
-            "single_R@1": float(sub["single_r1"].mean()),
-            "cluster_R@1": float(sub["cluster_r1"].mean()),
-            "cluster_R@5": float(sub["cluster_r5"].mean()),
-            "cluster_mAP": float(sub["ap"].mean()),
-        }
-
-    results = {"overall": summarize(df, "overall")}
+    results = {"overall": summarize_probe_clusters(df, args.k)}
     hist = df[df["session"].isin(["20140806 01", "20140806 03"])]
     newb = df[~df["session"].isin(["20140806 01", "20140806 03"])]
-    results["history_20140806"] = summarize(hist, "hist")
-    results["new_batches"] = summarize(newb, "new")
+    results["history_20140806"] = summarize_probe_clusters(hist, args.k)
+    results["new_batches"] = summarize_probe_clusters(newb, args.k)
+    results["by_session"] = {
+        str(session): summarize_probe_clusters(group, args.k)
+        for session, group in df.groupby("session", sort=True)
+    }
+    summary = results["overall"]
 
     results["_meta"] = {
-        "seed": args.seed, **info,
+        "protocol_version": "e5_session_local_cross_series_v1",
+        "features_stem": args.feats_stem,
+        "seed": int(args.seed), **info,
+        "reciprocal_rank_cutoff": int(args.k),
+        "identity_scope": "session_local_confirmed_identity",
+        "n_query_images_evaluable": int(summary["n_query_images"]),
+        "n_query_images_skipped": int(summary["n_query_images_skipped"]),
         "note": "串抽样版：每串随机挑 ceil(串长/2) 张，挑剩的进干扰池"
                 "（在库不作候选）；挑出的按整串分边进 query/库，"
-                "query 与库候选不同串 → 无平凡命中。"
-                "单串个体照片全部入库存作检索目标、不出 query。",
+                "每张 query 仅对同 session 的批次内身份打分，跨 session 未对齐"
+                "身份不作候选或负类，并再次执行完整同串剔除。"
+                "正确身份无有效 gallery 时计为 skipped，不进入指标分母。"
+                f"单真值簇排名报告 MRR@{args.k}，不是 mAP。",
     }
     args.out.mkdir(parents=True, exist_ok=True)
     tag = "" if args.feats_stem == "embeddings_eval51_all" else f"_{args.feats_stem.replace('embeddings_eval51_all', '')}"
@@ -104,17 +94,20 @@ def main():
         json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
     df.to_csv(out_csv, index=False, encoding="utf-8-sig")
 
-    print(f"探针簇 {len(df)} 个（{info['n_query_images']} 张 query 图）| "
-          f"库 {len(gal_idx)} 张（干扰池 {info['n_interference_pool_images']}）| "
+    print(f"探针簇 {summary['n_probe_clusters']}/"
+          f"{summary['n_probe_clusters_total']} 个可评（query "
+          f"{summary['n_query_images']}/{summary['n_query_images_total']} 张可评）| "
+          f"全批次原始库 {info['n_gallery_images_total_all_sessions']} 张"
+          f"（干扰池 {info['n_interference_pool_images']}）| "
           f"单串个体仅入库 {info['n_gallery_only_individuals']} 个")
-    print(f"[整体] 单图 R@1={results['overall'].get('single_R@1', float('nan')):.3f} | "
-          f"簇级 R@1={results['overall'].get('cluster_R@1', float('nan')):.3f} | "
-          f"簇级 R@5={results['overall'].get('cluster_R@5', float('nan')):.3f} | "
-          f"mAP={results['overall'].get('cluster_mAP', float('nan')):.3f}")
-    print(f"[历史库] 单图 R@1={results['history_20140806'].get('single_R@1', float('nan')):.3f} | "
-          f"簇级 R@1={results['history_20140806'].get('cluster_R@1', float('nan')):.3f}")
-    print(f"[新批次] 单图 R@1={results['new_batches'].get('single_R@1', float('nan')):.3f} | "
-          f"簇级 R@1={results['new_batches'].get('cluster_R@1', float('nan')):.3f}")
+    print(f"[整体] 单图 R@1={format_metric(results['overall']['single_R@1'])} | "
+          f"簇级 R@1={format_metric(results['overall']['cluster_R@1'])} | "
+          f"簇级 R@5={format_metric(results['overall']['cluster_R@5'])} | "
+          f"MRR@{args.k}={format_metric(results['overall'][f'cluster_MRR@{args.k}'])}")
+    print(f"[历史库] 单图 R@1={format_metric(results['history_20140806']['single_R@1'])} | "
+          f"簇级 R@1={format_metric(results['history_20140806']['cluster_R@1'])}")
+    print(f"[新批次] 单图 R@1={format_metric(results['new_batches']['single_R@1'])} | "
+          f"簇级 R@1={format_metric(results['new_batches']['cluster_R@1'])}")
     print(f"[done] -> {out_json}")
 
 

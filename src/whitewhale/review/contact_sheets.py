@@ -1,8 +1,7 @@
 """
-拼图（contact sheet）生成（Anchor 组版 + 候选簇版）。
+拼图（contact sheet）生成（已确认个体组版 + 候选簇版）。
 
-- build_contact_sheets：按 Anchor 组（高分目录数字子文件夹 = 代表照片组，
-  非个体 ID）输出拼图；
+- build_contact_sheets：按批次内已确认个体（高分目录数字子文件夹）输出拼图；
 - build_cluster_contact_sheets：按 HDBSCAN 候选簇（Candidate Cluster）分组
   输出，供人工审核逐簇核对（-1 噪声单独一张，仅提醒不强制分配）。
 
@@ -58,7 +57,7 @@ def build_contact_sheets(pilot_path: Path, out_dir: Path,
     MOCK = mock
     df = pd.read_csv(pilot_path)
     df["session_id"] = df["session_id"].astype(str)
-    groups = df.groupby("individual_id")  # Anchor 组标识（非个体 ID）
+    groups = df.groupby("individual_id")  # 含 session 命名空间的批次内已确认个体 ID
 
     out_dir.mkdir(parents=True, exist_ok=True)
     n_sheets = 0
@@ -73,8 +72,8 @@ def build_contact_sheets(pilot_path: Path, out_dir: Path,
         n_sheets += 1
         if n_sheets >= max_sheets:
             break
-    print(f"拼图（Anchor 组）: {n_sheets} 张 → {out_dir}")
-    print("注：Anchor 组是代表照片候选分组，非已确认个体身份")
+    print(f"拼图（已确认个体组）: {n_sheets} 张 → {out_dir}")
+    print("注：individual_id 仅在批次内确认；跨批次同名编号不自动视为同一只")
 
 
 def build_cluster_contact_sheets(clusters_csv: Path, out_dir: Path,
