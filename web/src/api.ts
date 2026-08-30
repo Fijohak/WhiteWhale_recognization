@@ -10,6 +10,34 @@ export type ManifestFile = {
   sha256: string;
 };
 
+export type BatchSummary = {
+  batch_id: string; name: string; stage: string; source_format: string;
+  image_count: number; crop_count: number; cluster_count: number; created_at: string;
+};
+
+export type ReviewTask = {
+  task_id: string; task_type: string; subject_type: string;
+  subject_id: string; status: string; created_at: string;
+};
+
+export type Candidate = {
+  cluster_id: string; batch_id: string; label: string; state: string;
+  metadata: Record<string, unknown>;
+  crops: Array<{ crop_id: string; media_url: string; membership_score: number | null; is_excluded: boolean }>;
+  matches: Array<{ individual_id: string; rank: number; score: number; support_frames: number; model_version: string }>;
+};
+
+export type Individual = {
+  individual_id: string; display_name: string; state: string;
+  flags: string[]; observation_count: number;
+};
+
+export type Catalog = {
+  catalog_id: string; status: string; model_version: string;
+  calibration_status: string; feature_dim: number; row_count: number;
+  source_batch_id: string | null; created_at: string;
+};
+
 type UploadStatus = {
   session_id: string;
   state: string;
@@ -133,5 +161,39 @@ export async function importSession(
     method: "POST",
     credentials: "include",
     headers: writeHeaders()
+  }));
+}
+
+export async function listBatches(): Promise<BatchSummary[]> {
+  return parse(await fetch("/api/batches", { credentials: "include" }));
+}
+
+export async function reviewInbox(): Promise<ReviewTask[]> {
+  return parse(await fetch("/api/reviews/inbox", { credentials: "include" }));
+}
+
+export async function getCandidate(clusterId: string): Promise<Candidate> {
+  return parse(await fetch(`/api/candidates/${clusterId}`, { credentials: "include" }));
+}
+
+export async function submitVote(taskId: string, choice: string, individualId?: string) {
+  return parse(await fetch(`/api/reviews/tasks/${taskId}/votes`, {
+    method: "POST", credentials: "include",
+    headers: { "Content-Type": "application/json", ...writeHeaders() },
+    body: JSON.stringify({ choice, individual_id: individualId || null })
+  }));
+}
+
+export async function listIndividuals(): Promise<Individual[]> {
+  return parse(await fetch("/api/individuals", { credentials: "include" }));
+}
+
+export async function listCatalogs(): Promise<Catalog[]> {
+  return parse(await fetch("/api/catalogs", { credentials: "include" }));
+}
+
+export async function activateCatalog(catalogId: string): Promise<Catalog> {
+  return parse(await fetch(`/api/catalogs/${catalogId}/activate`, {
+    method: "POST", credentials: "include", headers: writeHeaders()
   }));
 }

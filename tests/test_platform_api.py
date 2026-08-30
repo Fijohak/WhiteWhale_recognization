@@ -24,6 +24,7 @@ from whitewhale.platform.media import MediaService  # noqa: E402
 from whitewhale.platform.models import Base, Batch, Image  # noqa: E402
 from whitewhale.platform.storage import StorageLayout  # noqa: E402
 from whitewhale.platform.uploads import UploadService  # noqa: E402
+from whitewhale.platform.views import ArchiveReadService  # noqa: E402
 
 
 TEST_DATABASE_URL = os.getenv("WHITEWHALE_TEST_DATABASE_URL")
@@ -57,6 +58,7 @@ class TestPlatformBrowserApi(unittest.TestCase):
             uploads=UploadService(self.sessions, self.layout, chunk_size=1024),
             imports=BatchImportService(self.sessions, self.layout),
             media=MediaService(self.sessions, self.layout),
+            views=ArchiveReadService(self.sessions),
         ))
         self.client = TestClient(self.app, base_url="https://testserver")
 
@@ -132,6 +134,10 @@ class TestPlatformBrowserApi(unittest.TestCase):
         response = self.client.get(f"/api/media/images/{image_id}")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, payload)
+        batches = self.client.get("/api/batches")
+        self.assertEqual(batches.status_code, 200, batches.text)
+        self.assertEqual(batches.json()[0]["name"], "20140419 02")
+        self.assertEqual(batches.json()[0]["image_count"], 1)
         anonymous = TestClient(self.app, base_url="https://testserver")
         try:
             self.assertEqual(

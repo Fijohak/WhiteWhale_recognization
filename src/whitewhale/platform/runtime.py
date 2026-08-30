@@ -14,6 +14,7 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from .app import PlatformServices, Readiness, create_app
+from .archival_workflow import ArchivalWorkflowService
 from .artifacts import WorkerResultService
 from .auth import AuthService
 from .catalogs import CatalogService, CatalogValidationError
@@ -24,6 +25,7 @@ from .reviews import ReviewService
 from .storage import StorageLayout
 from .uploads import UploadService
 from .worker_auth import WorkerAuthService
+from .views import ArchiveReadService
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -52,6 +54,7 @@ class PlatformRuntime:
         self.sessions = sessionmaker(self.engine, expire_on_commit=False)
         self.storage = StorageLayout(settings.data_root)
         self.storage.initialize()
+        catalogs = CatalogService(self.sessions, self.storage)
         self.services = PlatformServices(
             auth=AuthService(self.sessions),
             uploads=UploadService(
@@ -69,7 +72,10 @@ class PlatformRuntime:
             results=WorkerResultService(self.sessions, self.storage),
             media=MediaService(self.sessions, self.storage),
             reviews=ReviewService(self.sessions),
-            catalogs=CatalogService(self.sessions, self.storage),
+            catalogs=catalogs,
+            archival=ArchivalWorkflowService(
+                self.sessions, self.storage, catalogs=catalogs),
+            views=ArchiveReadService(self.sessions),
         )
         self.app = create_app(
             readiness_probe=self.readiness,

@@ -25,6 +25,7 @@ from .artifacts import (
     ArtifactValidationError,
     WorkerResultService,
 )
+from .archival_workflow import ArchivalWorkflowService
 from .auth import (
     AuthService,
     BootstrapClosed,
@@ -43,6 +44,7 @@ from .uploads import (
     UploadFileSpec,
     UploadService,
 )
+from .views import ArchiveReadService
 from .worker_auth import (
     InvalidWorkerCredential,
     WorkerAuthService,
@@ -80,6 +82,8 @@ class PlatformServices:
     media: MediaService | None = None
     reviews: ReviewService | None = None
     catalogs: CatalogService | None = None
+    archival: ArchivalWorkflowService | None = None
+    views: ArchiveReadService | None = None
 
 
 class _StrictModel(BaseModel):
@@ -154,6 +158,20 @@ class ReviewVoteRequest(_StrictModel):
 class EmbeddingQueryRequest(_StrictModel):
     embedding: list[float] = Field(min_length=1)
     k: int = Field(default=5, gt=0, le=100)
+
+
+class ArchivalIngestRequest(_StrictModel):
+    purity_reviewer_id: uuid.UUID
+
+
+class PurityAdvanceRequest(_StrictModel):
+    identity_reviewer_ids: list[uuid.UUID]
+
+
+class CatalogStageRequest(_StrictModel):
+    model_version: str = Field(min_length=1, max_length=128)
+    calibration_status: str = Field(
+        default="provisional_unvalidated", min_length=1, max_length=64)
 
 
 def _default_readiness_probe() -> Readiness:
@@ -235,6 +253,14 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
     def require_admin(principal: Principal) -> None:
         if "admin" not in principal.roles:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "需要管理员权限")
+
+    def require_reviewer(principal: Principal) -> None:
+        if "reviewer" not in principal.roles:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "需要审核人权限")
+
+    def require_workflow_role(principal: Principal) -> None:
+        if principal.roles.isdisjoint({"admin", "operator", "reviewer"}):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "没有归档操作权限")
 
     @app.post("/api/auth/bootstrap", status_code=status.HTTP_201_CREATED)
     def bootstrap(credentials: Credentials):
@@ -432,6 +458,51 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
                     status.HTTP_404_NOT_FOUND, str(exc)) from exc
             return FileResponse(media.path, media_type=media.media_type)
 
+        @app.get("/api/media/crops/{crop_id}")
+        def get_crop(crop_id: uuid.UUID, request: Request):
+            current_principal(request)
+            try:
+                media = services.media.crop(crop_id)
+            except MediaNotFound as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, str(exc)) from exc
+            return FileResponse(media.path, media_type=media.media_type)
+
+    if services.views is not None:
+        @app.get("/api/batches")
+        def list_batches(request: Request):
+            current_principal(request)
+            return services.views.batches()
+
+        @app.get("/api/reviews/inbox")
+        def review_inbox(request: Request):
+            principal = current_principal(request)
+            require_reviewer(principal)
+            return services.views.review_inbox(principal.user_id)
+
+        @app.get("/api/candidates/{cluster_id}")
+        def get_candidate(cluster_id: uuid.UUID, request: Request):
+            current_principal(request)
+            try:
+                return services.views.candidate(cluster_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
+        @app.get("/api/individuals")
+        def list_individuals(request: Request):
+            current_principal(request)
+            return services.views.individuals()
+
+        @app.get("/api/individuals/{individual_id}")
+        def get_individual(individual_id: uuid.UUID, request: Request):
+            current_principal(request)
+            try:
+                return services.views.individual(individual_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
     if services.reviews is not None:
         @app.post("/api/reviews/tasks", status_code=status.HTTP_201_CREATED)
         def create_review_task(
@@ -511,7 +582,7 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
             catalog_id: uuid.UUID,
             principal: Principal = Depends(protected_write),
         ):
-            require_admin(principal)
+            require_reviewer(principal)
             try:
                 services.catalogs.activate(catalog_id)
                 snapshot = services.catalogs.active_version()
@@ -549,6 +620,86 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
                     "support_frames": item.support_frames,
                 } for item in matches],
             }
+
+    if services.archival is not None:
+        @app.post("/api/artifacts/{artifact_id}/ingest-archival")
+        def ingest_archival_artifact(
+            artifact_id: uuid.UUID,
+            body: ArchivalIngestRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_upload_role(principal)
+            try:
+                cluster_ids = services.archival.ingest_artifact(
+                    artifact_id,
+                    purity_reviewer_id=body.purity_reviewer_id,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"cluster_ids": [str(value) for value in cluster_ids]}
+
+        @app.post("/api/candidates/{cluster_id}/advance-purity")
+        def advance_candidate_purity(
+            cluster_id: uuid.UUID,
+            body: PurityAdvanceRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_workflow_role(principal)
+            try:
+                task_id = services.archival.advance_after_purity(
+                    cluster_id,
+                    identity_reviewer_ids=body.identity_reviewer_ids,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"task_id": str(task_id)}
+
+        @app.post("/api/reviews/tasks/{task_id}/apply-identity")
+        def apply_identity_review(
+            task_id: uuid.UUID,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_workflow_role(principal)
+            try:
+                individual_id = services.archival.apply_identity_review(task_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"individual_id": str(individual_id)}
+
+        @app.post("/api/batches/{batch_id}/catalogs/stage")
+        def stage_batch_catalog(
+            batch_id: uuid.UUID,
+            body: CatalogStageRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_upload_role(principal)
+            try:
+                catalog_id = services.archival.stage_catalog(
+                    batch_id,
+                    model_version=body.model_version,
+                    calibration_status=body.calibration_status,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"catalog_id": str(catalog_id)}
+
+        @app.post("/api/batches/{batch_id}/catalogs/{catalog_id}/publish")
+        def publish_batch_catalog(
+            batch_id: uuid.UUID,
+            catalog_id: uuid.UUID,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_reviewer(principal)
+            try:
+                services.archival.publish_catalog(batch_id, catalog_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"status": "published", "catalog_id": str(catalog_id)}
 
     if all((services.worker_auth, services.jobs,
             services.leases, services.results)):
@@ -699,6 +850,26 @@ def _mount_worker_api(
             "input_manifest": snapshot.input_manifest,
             "required_model_version": snapshot.required_model_version,
         }
+
+    if services.media is not None:
+        @app.get("/api/tasks/{job_id}/inputs/images/{image_id}")
+        def task_input_image(
+            job_id: uuid.UUID,
+            image_id: uuid.UUID,
+            lease_token: str = Header(alias="X-Lease-Token"),
+            worker: WorkerPrincipal = Depends(current_worker),
+        ):
+            try:
+                leases.validate(
+                    job_id, lease_token, device_id=worker.device_id)
+                media = services.media.leased_image(job_id, image_id)
+            except InvalidLease as exc:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, str(exc)) from exc
+            except MediaNotFound as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, str(exc)) from exc
+            return FileResponse(media.path, media_type=media.media_type)
 
     @app.post(
         "/api/tasks/{job_id}/start",

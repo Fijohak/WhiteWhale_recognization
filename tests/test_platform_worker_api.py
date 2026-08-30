@@ -20,7 +20,8 @@ from whitewhale.platform.artifacts import WorkerResultService  # noqa: E402
 from whitewhale.platform.auth import AuthService  # noqa: E402
 from whitewhale.platform.imports import BatchImportService  # noqa: E402
 from whitewhale.platform.jobs import JobQueueService, LeaseService  # noqa: E402
-from whitewhale.platform.models import Base  # noqa: E402
+from whitewhale.platform.media import MediaService  # noqa: E402
+from whitewhale.platform.models import Base, Batch, Image  # noqa: E402
 from whitewhale.platform.storage import StorageLayout  # noqa: E402
 from whitewhale.platform.uploads import UploadService  # noqa: E402
 from whitewhale.platform.worker_auth import WorkerAuthService  # noqa: E402
@@ -46,6 +47,7 @@ class TestWorkerApi(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         layout = StorageLayout(self.temp_dir.name)
         layout.initialize()
+        self.layout = layout
         services = PlatformServices(
             auth=AuthService(self.sessions),
             uploads=UploadService(self.sessions, layout),
@@ -54,6 +56,7 @@ class TestWorkerApi(unittest.TestCase):
             jobs=JobQueueService(self.sessions),
             leases=LeaseService(self.sessions),
             results=WorkerResultService(self.sessions, layout),
+            media=MediaService(self.sessions, layout),
         )
         self.client = TestClient(
             create_app(services=services), base_url="https://testserver")
@@ -72,6 +75,27 @@ class TestWorkerApi(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_worker_registers_leases_and_completes_a_validated_job(self):
+        image_payload = b"leased-image"
+        with self.sessions.begin() as db:
+            batch = Batch(
+                name="leased-batch", manifest_sha256="c" * 64,
+                source_format="generic")
+            db.add(batch)
+            db.flush()
+            image = Image(
+                batch_id=batch.id,
+                source_path="leased/input.jpg",
+                original_relative_path="input.jpg",
+                source_sha256=hashlib.sha256(image_payload).hexdigest(),
+                size_bytes=len(image_payload),
+            )
+            db.add(image)
+            db.flush()
+            batch_id = batch.id
+            image_id = image.id
+        image_path = self.layout.resolve("raw", "leased/input.jpg")
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        image_path.write_bytes(image_payload)
         human_headers = {"X-CSRF-Token": self.csrf}
         response = self.client.post(
             "/api/workers/registration-codes", headers=human_headers)
@@ -100,6 +124,7 @@ class TestWorkerApi(unittest.TestCase):
             "max_attempts": 3,
             "idempotency_key": "worker-api-e2e-v1",
             "input_manifest": {"items": ["image-1"]},
+            "batch_id": str(batch_id),
         })
         self.assertEqual(response.status_code, 201, response.text)
         job_id = response.json()["job_id"]
@@ -118,6 +143,15 @@ class TestWorkerApi(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["input_manifest"],
                          {"items": ["image-1"]})
+        response = self.client.get(
+            f"/api/tasks/{job_id}/inputs/images/{image_id}",
+            headers=lease_headers,
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.content, image_payload)
+        self.assertEqual(self.client.get(
+            f"/api/tasks/{job_id}/inputs/images/{image_id}"
+        ).status_code, 401)
         self.assertEqual(self.client.post(
             f"/api/tasks/{job_id}/start", headers=lease_headers
         ).status_code, 204)

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from .models import Image
+from .models import Crop, Image, Job
 from .storage import StorageLayout
 
 
@@ -40,3 +40,25 @@ class MediaService:
         media_type = mimetypes.guess_type(original_name)[0] or \
             "application/octet-stream"
         return MediaFile(path, media_type, original_name)
+
+    def crop(self, crop_id: uuid.UUID) -> MediaFile:
+        with self._sessions() as db:
+            crop = db.get(Crop, crop_id)
+            if crop is None:
+                raise MediaNotFound("Crop 不存在")
+            path = self._storage.resolve("artifacts", crop.artifact_path)
+            original_name = path.name
+        if not path.is_file():
+            raise MediaNotFound("Crop 文件不存在")
+        media_type = mimetypes.guess_type(original_name)[0] or \
+            "application/octet-stream"
+        return MediaFile(path, media_type, original_name)
+
+    def leased_image(self, job_id: uuid.UUID, image_id: uuid.UUID) -> MediaFile:
+        with self._sessions() as db:
+            job = db.get(Job, job_id)
+            image = db.get(Image, image_id)
+            if job is None or image is None or job.batch_id is None \
+                    or image.batch_id != job.batch_id:
+                raise MediaNotFound("图片不属于该租约任务的 Batch")
+        return self.image(image_id)

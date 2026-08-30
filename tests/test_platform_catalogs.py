@@ -218,6 +218,23 @@ class TestCatalogLifecycle(unittest.TestCase):
                     "password": "correct horse battery staple",
                 })
                 self.assertEqual(login.status_code, 200, login.text)
+                admin_csrf = login.json()["csrf_token"]
+                reviewer_created = client.post(
+                    "/api/users",
+                    json={
+                        "username": "catalog-reviewer",
+                        "password": "another correct horse battery staple",
+                        "roles": ["reviewer"],
+                    },
+                    headers={"X-CSRF-Token": admin_csrf},
+                )
+                self.assertEqual(
+                    reviewer_created.status_code, 201, reviewer_created.text)
+                login = client.post("/api/auth/login", json={
+                    "username": "catalog-reviewer",
+                    "password": "another correct horse battery staple",
+                })
+                self.assertEqual(login.status_code, 200, login.text)
                 csrf = login.json()["csrf_token"]
 
                 listed = client.get("/api/catalogs")
