@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import ssl
+import threading
 import time
 from dataclasses import dataclass
 from typing import Callable, Protocol
@@ -39,15 +40,20 @@ class WorkerApi(Protocol):
     def submit(self, lease: TaskLease, artifact: ArtifactOutput) -> str: ...
     def complete(self, lease: TaskLease) -> None: ...
     def fail(self, lease: TaskLease, detail: str) -> None: ...
+    def heartbeat(self, lease: TaskLease) -> None: ...
 
 
 Handler = Callable[[TaskLease], ArtifactOutput]
 
 
 class WorkerRunner:
-    def __init__(self, api: WorkerApi, *, handlers: dict[str, Handler]):
+    def __init__(self, api: WorkerApi, *, handlers: dict[str, Handler],
+                 heartbeat_seconds: float = 60.0):
+        if heartbeat_seconds <= 0:
+            raise ValueError("heartbeat_seconds 必须大于 0")
         self._api = api
         self._handlers = handlers
+        self._heartbeat_seconds = heartbeat_seconds
 
     def run_once(self) -> bool:
         lease = self._api.lease()
@@ -59,7 +65,31 @@ class WorkerRunner:
             return True
         try:
             self._api.start(lease)
-            artifact = handler(lease)
+            stop = threading.Event()
+            heartbeat_errors: list[Exception] = []
+
+            def keep_lease_alive() -> None:
+                while not stop.wait(self._heartbeat_seconds):
+                    try:
+                        self._api.heartbeat(lease)
+                    except Exception as exc:
+                        heartbeat_errors.append(exc)
+                        stop.set()
+
+            heartbeat = threading.Thread(
+                target=keep_lease_alive,
+                name=f"whitewhale-heartbeat-{lease.job_id}",
+                daemon=True,
+            )
+            heartbeat.start()
+            try:
+                artifact = handler(lease)
+            finally:
+                stop.set()
+                heartbeat.join(timeout=max(1.0, self._heartbeat_seconds * 2))
+            if heartbeat_errors:
+                raise RuntimeError(
+                    f"任务心跳失败: {heartbeat_errors[0]}")
             self._api.submit(lease, artifact)
             self._api.complete(lease)
         except Exception as exc:
@@ -151,6 +181,18 @@ class HttpWorkerApi:
             json_body={"detail": detail[:8000]},
             headers={"X-Lease-Token": lease.lease_token})
 
+    def heartbeat(self, lease: TaskLease) -> None:
+        self._request(
+            "POST", f"api/tasks/{lease.job_id}/heartbeat",
+            headers={"X-Lease-Token": lease.lease_token})
+
+    def download_input_image(self, lease: TaskLease, image_id: str) -> bytes:
+        return self._request_bytes(
+            "GET",
+            f"api/tasks/{lease.job_id}/inputs/images/{image_id}",
+            headers={"X-Lease-Token": lease.lease_token},
+        )
+
     def _request(
         self,
         method: str,
@@ -182,6 +224,34 @@ class HttpWorkerApi:
                 if response.status == 204 or not payload:
                     return None
                 return json.loads(payload)
+        except HTTPError as exc:
+            payload = exc.read()
+            try:
+                detail = json.loads(payload).get("detail")
+            except Exception:
+                detail = payload.decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"Worker API {exc.code}: {detail or exc.reason}") from exc
+
+    def _request_bytes(
+        self,
+        method: str,
+        path: str,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> bytes:
+        request_headers = dict(headers or {})
+        request_headers["Authorization"] = f"Bearer {self._device_token}"
+        request = Request(
+            urljoin(self._base_url, path),
+            headers=request_headers,
+            method=method,
+        )
+        try:
+            with urlopen(
+                request, timeout=self._timeout, context=self._ssl_context,
+            ) as response:
+                return response.read()
         except HTTPError as exc:
             payload = exc.read()
             try:

@@ -15,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 
 from .app import PlatformServices, Readiness, create_app
 from .archival_workflow import ArchivalWorkflowService
+from .archival_dispatch import ArchivalDispatchService
 from .artifacts import WorkerResultService
 from .auth import AuthService
 from .catalogs import CatalogService, CatalogValidationError
@@ -55,6 +56,7 @@ class PlatformRuntime:
         self.storage = StorageLayout(settings.data_root)
         self.storage.initialize()
         catalogs = CatalogService(self.sessions, self.storage)
+        jobs = JobQueueService(self.sessions)
         self.services = PlatformServices(
             auth=AuthService(self.sessions),
             uploads=UploadService(
@@ -64,7 +66,7 @@ class PlatformRuntime:
             ),
             imports=BatchImportService(self.sessions, self.storage),
             worker_auth=WorkerAuthService(self.sessions),
-            jobs=JobQueueService(self.sessions),
+            jobs=jobs,
             leases=LeaseService(
                 self.sessions,
                 lease_duration=timedelta(seconds=settings.lease_seconds),
@@ -76,6 +78,7 @@ class PlatformRuntime:
             archival=ArchivalWorkflowService(
                 self.sessions, self.storage, catalogs=catalogs),
             views=ArchiveReadService(self.sessions),
+            archival_dispatch=ArchivalDispatchService(self.sessions, jobs),
         )
         self.app = create_app(
             readiness_probe=self.readiness,

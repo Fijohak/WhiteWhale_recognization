@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -40,6 +41,9 @@ class _FakeApi:
     def complete(self, lease):
         self.calls.append(("complete", lease.job_id))
 
+    def heartbeat(self, lease):
+        self.calls.append(("heartbeat", lease.job_id))
+
     def fail(self, lease, detail):
         self.calls.append(("fail", lease.job_id, detail))
 
@@ -75,6 +79,27 @@ class TestWorkerRunner(unittest.TestCase):
         )
         self.assertTrue(WorkerRunner(api, handlers={}).run_once())
         self.assertEqual(api.calls[-1][0], "fail")
+
+    def test_long_handler_renews_lease_until_artifact_upload_finishes(self):
+        api = _FakeApi()
+
+        def slow_handler(lease):
+            time.sleep(0.04)
+            return ArtifactOutput(
+                artifact_type="result", data=b"ok", schema_version=1,
+                pipeline_config_digest="a" * 64,
+                model_version=lease.required_model_version,
+            )
+
+        runner = WorkerRunner(
+            api,
+            handlers={"test_echo": slow_handler},
+            heartbeat_seconds=0.01,
+        )
+        self.assertTrue(runner.run_once())
+        names = [call[0] for call in api.calls]
+        self.assertIn("heartbeat", names)
+        self.assertLess(names.index("heartbeat"), names.index("submit"))
 
 
 if __name__ == "__main__":

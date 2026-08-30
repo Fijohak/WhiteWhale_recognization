@@ -81,7 +81,7 @@ python scripts/run_worker.py run \
 
 若使用局域网内部 CA，额外传入 `--ca-file /path/to/caddy-root.crt`。设备令牌文件以 `0600` 创建；设备丢失后管理员应立即撤销。Worker 不读取 `.env` 中的数据库地址，也不保存正式目录状态。
 
-M1 内置 `test_echo` 用来验证完整控制面。检测、Embedding、聚类和训练 Handler 在后续里程碑按相同租约协议接入现有算法模块。
+M1 内置 `test_echo` 用来验证完整控制面。M2 已接入 `batch_archival` 的检测、Embedding 和聚类生产 Handler，详见 [platform_m2.md](platform_m2.md)。
 
 ## 6. 开发运行
 

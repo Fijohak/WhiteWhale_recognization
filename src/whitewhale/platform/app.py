@@ -26,6 +26,7 @@ from .artifacts import (
     WorkerResultService,
 )
 from .archival_workflow import ArchivalWorkflowService
+from .archival_dispatch import ArchivalDispatchRequest, ArchivalDispatchService
 from .auth import (
     AuthService,
     BootstrapClosed,
@@ -84,6 +85,7 @@ class PlatformServices:
     catalogs: CatalogService | None = None
     archival: ArchivalWorkflowService | None = None
     views: ArchiveReadService | None = None
+    archival_dispatch: ArchivalDispatchService | None = None
 
 
 class _StrictModel(BaseModel):
@@ -172,6 +174,15 @@ class CatalogStageRequest(_StrictModel):
     model_version: str = Field(min_length=1, max_length=128)
     calibration_status: str = Field(
         default="provisional_unvalidated", min_length=1, max_length=64)
+
+
+class ArchivalJobRequest(_StrictModel):
+    model_version: str = Field(min_length=1, max_length=128)
+    detector_version: str = Field(min_length=1, max_length=128)
+    preprocess_id: str = Field(min_length=1, max_length=128)
+    pipeline_config: dict = Field(default_factory=dict)
+    required_vram_mb: int = Field(default=4096, gt=0)
+    max_attempts: int = Field(default=3, gt=0)
 
 
 def _default_readiness_probe() -> Readiness:
@@ -700,6 +711,34 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
             return {"status": "published", "catalog_id": str(catalog_id)}
+
+    if services.archival_dispatch is not None:
+        @app.post(
+            "/api/batches/{batch_id}/archive-jobs",
+            status_code=status.HTTP_201_CREATED,
+        )
+        def dispatch_archival_job(
+            batch_id: uuid.UUID,
+            body: ArchivalJobRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_upload_role(principal)
+            try:
+                job_id = services.archival_dispatch.dispatch(
+                    batch_id,
+                    ArchivalDispatchRequest(
+                        model_version=body.model_version,
+                        detector_version=body.detector_version,
+                        preprocess_id=body.preprocess_id,
+                        pipeline_config=body.pipeline_config,
+                        required_vram_mb=body.required_vram_mb,
+                        max_attempts=body.max_attempts,
+                    ),
+                )
+            except (ValueError, JobConflict) as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"job_id": str(job_id)}
 
     if all((services.worker_auth, services.jobs,
             services.leases, services.results)):

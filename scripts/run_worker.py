@@ -17,6 +17,10 @@ from whitewhale.worker.client import (  # noqa: E402
     WorkerRunner,
     test_echo_handler,
 )
+from whitewhale.worker.archival import (  # noqa: E402
+    ArchivalWorkerConfig,
+    make_batch_archival_handler,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -41,6 +45,13 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--token-file", type=Path, required=True)
     run.add_argument("--ca-file")
     run.add_argument("--idle-seconds", type=float, default=5.0)
+    run.add_argument("--heartbeat-seconds", type=float, default=60.0)
+    run.add_argument("--detector-weights", type=Path)
+    run.add_argument("--reid-checkpoint", type=Path)
+    run.add_argument("--device", default="auto")
+    run.add_argument("--detector-conf", type=float, default=0.25)
+    run.add_argument("--detector-imgsz", type=int, default=1024)
+    run.add_argument("--batch-size", type=int, default=32)
     return parser
 
 
@@ -74,9 +85,30 @@ def main() -> None:
     credentials = json.loads(args.token_file.read_text(encoding="utf-8"))
     api = HttpWorkerApi(
         args.api, credentials["device_token"], ca_file=args.ca_file)
-    WorkerRunner(api, handlers={
+    handlers = {
         "test_echo": test_echo_handler,
-    }).run_forever(idle_seconds=args.idle_seconds)
+    }
+    if bool(args.detector_weights) != bool(args.reid_checkpoint):
+        raise SystemExit(
+            "归档 Worker 必须同时提供 --detector-weights 和 --reid-checkpoint")
+    if args.detector_weights and args.reid_checkpoint:
+        handlers["batch_archival"] = make_batch_archival_handler(
+            api,
+            ArchivalWorkerConfig(
+                detector_weights=args.detector_weights,
+                reid_checkpoint=args.reid_checkpoint,
+                device=args.device,
+                detector_conf=args.detector_conf,
+                detector_imgsz=args.detector_imgsz,
+                batch_size=args.batch_size,
+            ),
+        )
+    WorkerRunner(
+        api,
+        handlers=handlers,
+        heartbeat_seconds=args.heartbeat_seconds,
+    ).run_forever(
+        idle_seconds=args.idle_seconds)
 
 
 if __name__ == "__main__":
