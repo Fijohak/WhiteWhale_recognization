@@ -1,0 +1,32 @@
+(whitewhale_app) {
+    encode zstd gzip
+
+    @backend path /api/* /health /ready
+    handle @backend {
+        reverse_proxy api:8000
+    }
+
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy no-referrer
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+}
+
+# Tailscale Serve 代理到宿主机 127.0.0.1:8080，外部仍是 HTTPS。
+:8080 {
+    import whitewhale_app
+}
+
+# 局域网 HTTPS 地址由管理员在 .env 中设置，例如 https://whitewhale.local。
+{$WHITEWHALE_HTTPS_SITE:https://localhost} {
+    tls internal
+    import whitewhale_app
+}

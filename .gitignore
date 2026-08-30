@@ -52,3 +52,11 @@ tmp/
 
 datas/
 .serena/
+
+# Codex isolated implementation worktrees
+.worktrees/
+
+# TypeScript / Vite generated files
+web/node_modules/
+web/dist/
+*.tsbuildinfo

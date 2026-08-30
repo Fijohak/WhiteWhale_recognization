@@ -1,0 +1,137 @@
+export type User = {
+  user_id: string;
+  username: string;
+  roles: string[];
+};
+
+export type ManifestFile = {
+  relative_path: string;
+  size_bytes: number;
+  sha256: string;
+};
+
+type UploadStatus = {
+  session_id: string;
+  state: string;
+  chunk_size: number;
+  files: Array<{
+    file_id: string;
+    relative_path: string;
+    state: string;
+    received_parts: number[];
+    missing_parts: number[];
+  }>;
+};
+
+const CSRF_KEY = "whitewhale-csrf";
+
+async function parse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    let message = `${response.status} ${response.statusText}`;
+    try {
+      const body = await response.json() as { detail?: string };
+      message = body.detail ?? message;
+    } catch {
+      // Keep the HTTP status when the response body is not JSON.
+    }
+    throw new Error(message);
+  }
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+}
+
+function writeHeaders(): HeadersInit {
+  const csrf = sessionStorage.getItem(CSRF_KEY);
+  return csrf ? { "X-CSRF-Token": csrf } : {};
+}
+
+export async function login(username: string, password: string): Promise<User> {
+  const result = await parse<{ csrf_token: string }>(await fetch("/api/auth/login", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password })
+  }));
+  sessionStorage.setItem(CSRF_KEY, result.csrf_token);
+  return me();
+}
+
+export async function me(): Promise<User> {
+  return parse(await fetch("/api/auth/me", { credentials: "include" }));
+}
+
+export async function logout(): Promise<void> {
+  await parse(await fetch("/api/auth/logout", {
+    method: "POST",
+    credentials: "include",
+    headers: writeHeaders()
+  }));
+  sessionStorage.removeItem(CSRF_KEY);
+}
+
+export async function createUpload(
+  batchName: string,
+  sourceFormat: "idolphin" | "generic",
+  files: ManifestFile[]
+): Promise<{ session_id: string }> {
+  return parse(await fetch("/api/uploads", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...writeHeaders() },
+    body: JSON.stringify({ batch_name: batchName, source_format: sourceFormat, files })
+  }));
+}
+
+export async function getUploadStatus(sessionId: string): Promise<UploadStatus> {
+  return parse(await fetch(`/api/uploads/${sessionId}`, { credentials: "include" }));
+}
+
+export async function putPart(
+  sessionId: string,
+  fileId: string,
+  partNumber: number,
+  data: Blob,
+  sha256: string
+): Promise<void> {
+  await parse(await fetch(
+    `/api/uploads/${sessionId}/files/${fileId}/parts/${partNumber}`,
+    {
+      method: "PUT",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "X-Content-SHA256": sha256,
+        ...writeHeaders()
+      },
+      body: data
+    }
+  ));
+}
+
+export async function completeFile(sessionId: string, fileId: string): Promise<void> {
+  await parse(await fetch(`/api/uploads/${sessionId}/files/${fileId}/complete`, {
+    method: "POST",
+    credentials: "include",
+    headers: writeHeaders()
+  }));
+}
+
+export async function completeSession(sessionId: string): Promise<void> {
+  await parse(await fetch(`/api/uploads/${sessionId}/complete`, {
+    method: "POST",
+    credentials: "include",
+    headers: writeHeaders()
+  }));
+}
+
+export async function importSession(
+  sessionId: string,
+  capturedOn?: string
+): Promise<{ batch_id: string }> {
+  const query = capturedOn ? `?captured_on=${encodeURIComponent(capturedOn)}` : "";
+  return parse(await fetch(`/api/uploads/${sessionId}/import${query}`, {
+    method: "POST",
+    credentials: "include",
+    headers: writeHeaders()
+  }));
+}

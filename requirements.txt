@@ -13,6 +13,13 @@ python-multipart
 hdbscan                # HDBSCAN 候选聚类（run_pipeline 正式依赖）
 filelock>=3.25,<3.26   # 审核票/累计导出 advisory lock（持久锁适配 3.25 API）
 
+# 协作平台控制面（FastAPI + PostgreSQL）
+sqlalchemy>=2.0,<2.1
+alembic>=1.16,<2
+psycopg[binary]>=3.2,<4
+pydantic-settings>=2.10,<3
+argon2-cffi>=25,<26
+
 # 可选（按需安装）
 # faiss-cpu            # Faiss Top-K 加速
 # pytest               # 测试（tests/）

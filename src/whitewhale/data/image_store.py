@@ -16,7 +16,7 @@ from __future__ import annotations
 import io
 import re
 from collections import OrderedDict
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Iterable
 
 from PIL import Image, ImageOps
@@ -75,7 +75,8 @@ class ImageStore:
         """
         root_abs = self.root.resolve()
         relative = Path(rel_path)
-        if relative.anchor:
+        windows_path = PureWindowsPath(rel_path)
+        if relative.anchor or windows_path.drive or windows_path.root:
             raise ValueError(f"路径越界: {rel_path} 不是数据根内的相对路径")
         p = (root_abs / relative).resolve()
         try:
