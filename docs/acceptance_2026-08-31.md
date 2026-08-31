@@ -27,6 +27,8 @@
 
 ## 尚需管理员完成的一次性外部动作
 
+2026-08-31 最终环境复核的实测状态：开发库有 202 张已迁移历史图、2 个 Batch、0 个 active Worker、0 个近五分钟 Worker 心跳和 0 个真实查询任务；仓库工作区没有约 3000 张源图。`whitewhale-deploy.timer` 与 `whitewhale-ready.timer` 尚未安装，当前 sudo 缓存已过期。真实大批次断网验收需要管理员重新执行 `sudo -v`、提供待验收图片目录，并至少启动一台带 `query_inference,batch_archival` 能力和生产模型版本的 4060 Laptop Worker。
+
 Tailscale 守护进程已在线，节点 DNS 为 `cancade.tail39defd.ts.net`。当前 tailnet 尚未启用 Serve；官方控制台要求账号本人登录后确认一次。启用后运行：
 
 ```bash
