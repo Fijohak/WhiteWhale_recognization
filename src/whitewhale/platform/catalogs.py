@@ -274,14 +274,28 @@ class CatalogService:
         return snapshot
 
     def search(self, probe: np.ndarray, *, k: int = 5) -> list[CatalogSearchResult]:
+        catalog_id = self.active_catalog_id()
+        if catalog_id is None:
+            raise CatalogValidationError("尚无 active Catalog")
+        return self.search_at(catalog_id, probe, k=k)
+
+    def search_at(
+        self,
+        catalog_id: uuid.UUID,
+        probe: np.ndarray,
+        *,
+        k: int = 5,
+    ) -> list[CatalogSearchResult]:
         if k <= 0:
             raise ValueError("k 必须大于 0")
         probe_matrix = _normalized_matrix(np.asarray(probe).reshape(1, -1))
-        active = self.active_version(validate_index=True)
         with self._sessions() as db:
+            catalog = db.get(CatalogVersion, catalog_id)
+            if catalog is None or catalog.status not in {"active", "retired"}:
+                raise CatalogValidationError("查询绑定的 Catalog 不可用")
             memberships = list(db.scalars(
                 select(CatalogMembership)
-                .where(CatalogMembership.catalog_id == active.catalog_id)
+                .where(CatalogMembership.catalog_id == catalog_id)
                 .order_by(CatalogMembership.row_index)
             ))
             current_individuals = {
@@ -301,15 +315,21 @@ class CatalogService:
                 )
             }
             snapshot = (
-                active.catalog_id, active.model_version,
-                active.calibration_status, active.feature_dim,
-                db.scalar(select(CatalogVersion.index_path).where(
-                    CatalogVersion.id == active.catalog_id)),
+                catalog.id, catalog.model_version,
+                catalog.calibration_status, catalog.feature_dim,
+                catalog.index_path, catalog.index_sha256,
             )
         if probe_matrix.shape[1] != snapshot[3]:
             raise CatalogValidationError("查询特征维度与 Catalog 不一致")
         index_bytes = self._storage.resolve(
             "catalog_versions", snapshot[4]).read_bytes()
+        if hashlib.sha256(index_bytes).hexdigest() != snapshot[5]:
+            raise CatalogValidationError("Catalog Faiss SHA-256 不一致")
+        with self._sessions() as db:
+            stored = db.get(CatalogVersion, catalog_id)
+            if stored is None:
+                raise CatalogValidationError("查询绑定的 Catalog 不存在")
+            self._validate_stored_snapshot(stored, memberships, index_bytes)
         index = faiss.deserialize_index(
             np.frombuffer(index_bytes, dtype=np.uint8).copy())
         scores, rows = index.search(probe_matrix, len(memberships))

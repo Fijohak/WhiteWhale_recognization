@@ -252,6 +252,57 @@ class UploadPart(TimestampMixin, Base):
     )
 
 
+class QueryRequest(TimestampMixin, Base):
+    __tablename__ = "query_requests"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    upload_session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("upload_sessions.id", ondelete="RESTRICT"),
+        unique=True, nullable=False)
+    job_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("jobs.id", ondelete="RESTRICT"), unique=True)
+    catalog_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_versions.id", ondelete="RESTRICT"), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    detector_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    preprocess_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    state: Mapped[str] = mapped_column(
+        String(32), default="queued", nullable=False)
+    top_k: Mapped[int] = mapped_column(Integer, nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    result_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('queued', 'running', 'succeeded', 'failed')",
+            name="valid_state"),
+        CheckConstraint("top_k > 0 AND top_k <= 100", name="valid_top_k"),
+    )
+
+
+class QueryImage(TimestampMixin, Base):
+    __tablename__ = "query_images"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    query_request_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("query_requests.id", ondelete="CASCADE"), nullable=False)
+    row_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    original_relative_path: Mapped[str] = mapped_column(Text, nullable=False)
+    source_path: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    __table_args__ = (
+        UniqueConstraint(
+            "query_request_id", "row_index",
+            name="query_images_request_row"),
+        UniqueConstraint(
+            "query_request_id", "original_relative_path",
+            name="query_images_request_path"),
+        CheckConstraint("row_index >= 0", name="nonnegative_row_index"),
+        CheckConstraint("size_bytes >= 0", name="nonnegative_size_bytes"),
+    )
+
+
 class SourceGroup(TimestampMixin, Base):
     __tablename__ = "source_groups"
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
