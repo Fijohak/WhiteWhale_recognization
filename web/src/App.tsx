@@ -13,6 +13,7 @@ import {
   getUploadStatus,
   getDashboard,
   getBatch,
+  dispatchArchivalJob,
   importSession,
   activateCatalog,
   getCandidate,
@@ -245,15 +246,46 @@ function OverviewPanel() {
   </section>;
 }
 
-function BatchesPanel() {
+function BatchesPanel({ canDispatch }: { canDispatch: boolean }) {
   const [items, setItems] = useState<BatchSummary[]>([]);
   const [detail, setDetail] = useState<BatchDetail | null>(null);
+  const [models, setModels] = useState<ModelSummary[]>([]);
+  const [modelVersion, setModelVersion] = useState("");
+  const [detectorVersion, setDetectorVersion] = useState("legacy-yolo-v2");
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  useEffect(() => { listBatches().then(setItems).catch((e) => setError(String(e))); }, []);
+  useEffect(() => {
+    listBatches().then(setItems).catch((e) => setError(String(e)));
+    listModels().then((rows) => {
+      const reid = rows.filter((item) => item.feature_dim !== null);
+      setModels(reid);
+      const production = reid.find((item) => item.status === "production") ?? reid[0];
+      if (production) setModelVersion(production.version);
+    }).catch((e) => setError(String(e)));
+  }, []);
+  async function dispatch() {
+    if (!detail || !modelVersion) return;
+    const model = models.find((item) => item.version === modelVersion);
+    try {
+      const result = await dispatchArchivalJob(detail.batch_id, {
+        model_version: modelVersion,
+        detector_version: detectorVersion,
+        preprocess_id: model?.preprocess_id ?? "unknown",
+        pipeline_config: { source: "web", identity_policy: "human_review_required" },
+        required_vram_mb: 4096,
+        max_attempts: 3
+      });
+      setMessage(`GPU 归档任务已排队：${result.job_id}`);
+      setDetail(await getBatch(detail.batch_id));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "任务创建失败");
+    }
+  }
   return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">BATCHES</p><h2>批次进度</h2></div></div>
     {error && <p className="error">{error}</p>}
+    {message && <p className="success">{message}</p>}
     <div className="data-list">{items.map((item) => <article key={item.batch_id} onClick={() => getBatch(item.batch_id).then(setDetail).catch((e) => setError(String(e)))}><div><strong>{item.name}</strong><span>{item.source_format} · {new Date(item.created_at).toLocaleString()}</span></div><div className="metrics"><b>{item.image_count} 图</b><b>{item.crop_count} Crop</b><b>{item.cluster_count} 簇</b><span className="pill">{item.stage}</span></div></article>)}</div>
-    {detail && <div className="review-detail"><h3>{detail.name} · Manifest</h3><p className="muted">SHA-256 {detail.manifest_sha256}</p><pre className="plan-preview">{JSON.stringify(detail.metadata, null, 2)}</pre><h3 className="subheading">Job / Attempt 入口</h3><div className="data-list compact">{detail.jobs.map((job) => <article key={job.job_id}><div><strong>{job.task_type}</strong><span>{job.job_id}</span></div><span className="pill">{job.state}</span></article>)}</div></div>}
+    {detail && <div className="review-detail"><h3>{detail.name} · Manifest</h3><p className="muted">SHA-256 {detail.manifest_sha256}</p><pre className="plan-preview">{JSON.stringify(detail.metadata, null, 2)}</pre>{canDispatch && detail.stage === "registered" && <><h3 className="subheading">提交到成员 GPU</h3><div className="form-grid"><label>Re-ID 模型<select value={modelVersion} onChange={(e) => setModelVersion(e.target.value)}>{models.map((item) => <option key={item.model_version_id} value={item.version}>{item.version} · {item.status}</option>)}</select></label><label>Detector 版本<input value={detectorVersion} onChange={(e) => setDetectorVersion(e.target.value)} /></label></div><button onClick={dispatch} disabled={!modelVersion || !detectorVersion}>创建批内归档任务</button></>}<h3 className="subheading">Job / Attempt 入口</h3><div className="data-list compact">{detail.jobs.map((job) => <article key={job.job_id}><div><strong>{job.task_type}</strong><span>{job.job_id}</span></div><span className="pill">{job.state}</span></article>)}</div></div>}
   </section>;
 }
 
@@ -399,7 +431,8 @@ export default function App() {
   if (loading) return <main className="loading">正在连接控制面…</main>;
   if (!user) return <Login onLogin={setUser} />;
   const isAdmin = user.roles.includes("admin");
-  const canSeeWorkers = isAdmin || user.roles.includes("operator");
+  const canOperate = isAdmin || user.roles.includes("operator");
+  const canSeeWorkers = canOperate;
   const navigation: Array<[Page, string]> = [
     ["overview", "总览"], ["upload", "批次上传"], ["batches", "批次进度"],
     ["reviews", "审核中心"], ["individuals", "个体目录"],
@@ -420,7 +453,7 @@ export default function App() {
       <div className="notice"><strong>候选不等于正式身份</strong><span>上传完成后，模型只生成候选结果；任何跨时间个体合并均需独立人工审核。</span></div>
       {page === "overview" && <OverviewPanel />}
       {page === "upload" && <UploadPanel />}
-      {page === "batches" && <BatchesPanel />}
+      {page === "batches" && <BatchesPanel canDispatch={canOperate} />}
       {page === "reviews" && <ReviewPanel />}
       {page === "individuals" && <IndividualsPanel />}
       {page === "relationships" && <RelationshipsPanel />}

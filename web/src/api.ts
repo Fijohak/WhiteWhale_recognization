@@ -293,6 +293,25 @@ export async function getBatch(batchId: string): Promise<BatchDetail> {
   return parse(await fetch(`/api/batches/${batchId}`, { credentials: "include" }));
 }
 
+export async function dispatchArchivalJob(
+  batchId: string,
+  request: {
+    model_version: string;
+    detector_version: string;
+    preprocess_id: string;
+    pipeline_config: Record<string, unknown>;
+    required_vram_mb: number;
+    max_attempts: number;
+  }
+): Promise<{ job_id: string }> {
+  return parse(await fetch(`/api/batches/${batchId}/archive-jobs`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...writeHeaders() },
+    body: JSON.stringify(request)
+  }));
+}
+
 export async function listJobs(): Promise<JobSummary[]> {
   return parse(await fetch("/api/jobs", { credentials: "include" }));
 }
