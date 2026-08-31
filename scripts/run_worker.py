@@ -21,6 +21,10 @@ from whitewhale.worker.archival import (  # noqa: E402
     ArchivalWorkerConfig,
     make_batch_archival_handler,
 )
+from whitewhale.worker.query import (  # noqa: E402
+    QueryWorkerConfig,
+    make_query_handler,
+)
 from whitewhale.worker.training import (  # noqa: E402
     WorkerTrainingConfig,
     make_training_handler,
@@ -111,17 +115,18 @@ def main() -> None:
         raise SystemExit(
             "归档 Worker 必须同时提供 --detector-weights 和 --reid-checkpoint")
     if args.detector_weights and args.reid_checkpoint:
+        shared_config = {
+            "detector_weights": args.detector_weights,
+            "reid_checkpoint": args.reid_checkpoint,
+            "device": args.device,
+            "detector_conf": args.detector_conf,
+            "detector_imgsz": args.detector_imgsz,
+            "batch_size": args.batch_size,
+        }
         handlers["batch_archival"] = make_batch_archival_handler(
-            api,
-            ArchivalWorkerConfig(
-                detector_weights=args.detector_weights,
-                reid_checkpoint=args.reid_checkpoint,
-                device=args.device,
-                detector_conf=args.detector_conf,
-                detector_imgsz=args.detector_imgsz,
-                batch_size=args.batch_size,
-            ),
-        )
+            api, ArchivalWorkerConfig(**shared_config))
+        handlers["query_inference"] = make_query_handler(
+            api, QueryWorkerConfig(**shared_config))
     WorkerRunner(
         api,
         handlers=handlers,

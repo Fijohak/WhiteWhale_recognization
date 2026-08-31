@@ -2,14 +2,17 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 import numpy as np
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -17,10 +20,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from whitewhale.platform.auth import AuthService  # noqa: E402
+from whitewhale.platform.app import PlatformServices, create_app  # noqa: E402
+from whitewhale.platform.artifacts import WorkerResultService  # noqa: E402
 from whitewhale.platform.catalogs import (  # noqa: E402
     CatalogEntry, CatalogService, build_flat_ip_index,
 )
-from whitewhale.platform.jobs import JobQueueService  # noqa: E402
+from whitewhale.platform.jobs import JobQueueService, LeaseService  # noqa: E402
+from whitewhale.platform.imports import BatchImportService  # noqa: E402
 from whitewhale.platform.models import (  # noqa: E402
     Artifact, ArtifactManifest, Base, Batch, ConfirmedIndividual, Crop,
     Image, Job, JobAttempt, Observation, QueryImage, QueryRequest,
@@ -30,6 +36,7 @@ from whitewhale.platform.query import QueryService  # noqa: E402
 from whitewhale.platform.states import JobState  # noqa: E402
 from whitewhale.platform.storage import StorageLayout  # noqa: E402
 from whitewhale.platform.uploads import UploadFileSpec, UploadService  # noqa: E402
+from whitewhale.platform.worker_auth import WorkerAuthService  # noqa: E402
 
 
 TEST_DATABASE_URL = os.getenv("WHITEWHALE_TEST_DATABASE_URL")
@@ -142,20 +149,34 @@ class TestQueryService(unittest.TestCase):
                 self.storage.resolve("raw", image.source_path).read_bytes(),
                 payload)
             job_id = job.id
-        report = json.dumps({
+        report_manifest = {
             "schema_version": 1,
             "query_request_id": str(query_id),
             "catalog_id": str(self.catalog_id),
             "model_version": "r4",
+            "detector_version": "det-v1",
             "preprocess_id": "legacy",
+            "pipeline_config_digest": job.input_manifest[
+                "pipeline_config_digest"],
+            "row_binding_digest": job.input_manifest["row_binding_digest"],
             "detections": [{
                 "query_image_id": str(image.id), "crop_index": 0,
                 "bbox": [1, 2, 10, 8], "quality": 0.95,
-                "embedding": [1.0, 0.0],
             }],
-        }, separators=(",", ":")).encode()
+        }
+        output = io.BytesIO()
+        with zipfile.ZipFile(
+                output, "w", compression=zipfile.ZIP_STORED) as archive:
+            archive.writestr(
+                "manifest.json",
+                json.dumps(report_manifest, separators=(",", ":")))
+            vector_file = io.BytesIO()
+            np.save(vector_file, np.asarray([[1.0, 0.0]], dtype=np.float32),
+                    allow_pickle=False)
+            archive.writestr("embeddings.npy", vector_file.getvalue())
+        report = output.getvalue()
         digest = hashlib.sha256(report).hexdigest()
-        relative = Path(str(job_id)) / "query-result.json"
+        relative = Path(str(job_id)) / "query-result.zip"
         target = self.storage.resolve("artifacts", relative)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(report)
@@ -177,20 +198,28 @@ class TestQueryService(unittest.TestCase):
             db.flush()
             db.add(ArtifactManifest(
                 artifact_id=artifact.id, schema_version=1,
-                model_version="r4", preprocess_id="legacy",
+                model_version="r4", detector_version="det-v1",
+                preprocess_id="legacy",
+                row_binding_digest=job.input_manifest[
+                    "row_binding_digest"],
                 pipeline_config_digest=job.input_manifest[
                     "pipeline_config_digest"], detail={}))
         result = service.result(query_id, requester_user_id=self.owner.id,
                                 is_admin=False)
         self.assertEqual(result["status"], "succeeded")
+        self.assertEqual(result["images"], [{
+            "query_image_id": str(image.id),
+            "original_relative_path": "folder/query.jpg",
+        }])
         match = result["detections"][0]["matches"][0]
         self.assertEqual(match["individual_name"], "DOLPHIN-001")
         self.assertAlmostEqual(match["score"], 1.0)
         self.assertEqual(match["side"], "left")
+        self.assertFalse(match["cross_side"])
         self.assertEqual(result["catalog_id"], str(self.catalog_id))
 
     def test_query_upload_cannot_be_dispatched_by_another_user(self):
-        upload_id, _ = self._completed_upload()
+        upload_id, payload = self._completed_upload()
         service = QueryService(
             self.sessions, self.storage, JobQueueService(self.sessions),
             CatalogService(self.sessions, self.storage))
@@ -198,6 +227,71 @@ class TestQueryService(unittest.TestCase):
             service.dispatch_upload(
                 upload_id, owner_user_id=os.urandom(16).hex(), k=3,
                 detector_version="det-v1", required_vram_mb=4096)
+
+    def test_human_api_dispatches_upload_and_returns_queued_status(self):
+        upload_id, payload = self._completed_upload()
+        jobs = JobQueueService(self.sessions)
+        service = QueryService(
+            self.sessions, self.storage, jobs,
+            CatalogService(self.sessions, self.storage))
+        app = create_app(services=PlatformServices(
+            auth=AuthService(self.sessions),
+            uploads=self.uploads,
+            imports=BatchImportService(self.sessions, self.storage),
+            worker_auth=WorkerAuthService(self.sessions),
+            jobs=jobs,
+            leases=LeaseService(self.sessions),
+            results=WorkerResultService(self.sessions, self.storage),
+            query=service,
+        ))
+        with TestClient(app, base_url="https://testserver") as client:
+            login = client.post("/api/auth/login", json={
+                "username": "query-owner",
+                "password": "correct horse battery staple",
+            })
+            headers = {"X-CSRF-Token": login.json()["csrf_token"]}
+            response = client.post(
+                f"/api/uploads/{upload_id}/query",
+                headers=headers,
+                json={
+                    "k": 5,
+                    "detector_version": "det-v1",
+                    "required_vram_mb": 4096,
+                },
+            )
+            self.assertEqual(response.status_code, 201, response.text)
+            query_id = response.json()["query_request_id"]
+            result = client.get(f"/api/query/requests/{query_id}")
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertEqual(result.json()["status"], "queued")
+
+            registration = client.post(
+                "/api/workers/registration-codes", headers=headers)
+            worker = client.post("/api/workers/register", json={
+                "registration_code": registration.json()[
+                    "registration_code"],
+                "name": "query-api-worker",
+                "gpu_model": "RTX 4060 Laptop", "vram_mb": 8192,
+                "cuda_version": "12.6", "worker_version": "v1",
+                "capabilities": ["query_inference"],
+                "model_versions": ["r4"], "capacity": 1,
+            })
+            worker_headers = {
+                "Authorization": f"Bearer {worker.json()['device_token']}"}
+            lease = client.post("/api/tasks/lease", headers=worker_headers)
+            self.assertEqual(lease.status_code, 200, lease.text)
+            query_image_id = lease.json()["input_manifest"]["images"][0][
+                "query_image_id"]
+            downloaded = client.get(
+                f"/api/tasks/{lease.json()['job_id']}/inputs/query-images/"
+                f"{query_image_id}",
+                headers={
+                    **worker_headers,
+                    "X-Lease-Token": lease.json()["lease_token"],
+                },
+            )
+            self.assertEqual(downloaded.status_code, 200, downloaded.text)
+            self.assertEqual(downloaded.content, payload)
 
 
 if __name__ == "__main__":

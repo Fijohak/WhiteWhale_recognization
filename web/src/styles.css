@@ -49,6 +49,22 @@ nav button.active { background: #ffffff14; color: white; }
 .progress div { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; color: #52727d; }
 progress { width: 100%; height: 8px; accent-color: #0b8099; }
 .upload-panel > button { margin-top: 20px; min-width: 150px; }
+.query-panel > button { margin-top: 20px; min-width: 180px; }
+.query-pickers { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.query-pickers .dropzone { padding: 28px 18px; }
+.query-results { display: grid; gap: 18px; margin-top: 30px; }
+.query-summary { display: flex; justify-content: space-between; gap: 16px; padding: 14px 16px; border-radius: 10px; background: #eef7f7; }
+.query-summary span { color: #617a84; font-size: 12px; }
+.query-detection { display: grid; gap: 14px; padding: 18px; border: 1px solid #dfe9eb; border-radius: 14px; }
+.query-source { display: flex; align-items: center; gap: 14px; }
+.query-source > img { width: 110px; height: 76px; border-radius: 9px; object-fit: cover; background: #dfe9eb; }
+.query-source > div { display: grid; gap: 5px; min-width: 0; }
+.query-source strong { overflow-wrap: anywhere; }
+.query-source span, .match-card span, .match-card small { color: #6b828b; font-size: 12px; }
+.match-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.match-card { display: grid; grid-template-columns: 86px 1fr; gap: 10px; padding: 10px; border-radius: 10px; background: #f4f8f8; }
+.match-card img { width: 86px; height: 70px; border-radius: 7px; object-fit: cover; background: #dfe9eb; }
+.match-card div { display: grid; gap: 4px; align-content: center; }
 .data-list { display: grid; gap: 10px; margin-top: 24px; }
 .data-list article { display: flex; justify-content: space-between; gap: 20px; align-items: center; padding: 16px; border: 1px solid #e0e9eb; border-radius: 12px; }
 .data-list article > div:first-child { display: grid; gap: 4px; }
@@ -78,4 +94,4 @@ progress { width: 100%; height: 8px; accent-color: #0b8099; }
 .individual-card small { color: #9b5a45; }
 .avatar { display: grid; place-items: center; width: 46px; height: 46px; margin-bottom: 8px; border-radius: 50%; background: #dceff1; color: #17677b; font-weight: 800; }
 .loading { min-height: 100vh; display: grid; place-items: center; background: #082f49; color: white; }
-@media (max-width: 800px) { .app-shell { grid-template-columns: 1fr; } aside { position: static; height: auto; } nav { grid-template-columns: repeat(2, 1fr); margin-top: 24px; } .account { margin-top: 24px; } .form-grid, .review-layout { grid-template-columns: 1fr; } .notice { flex-direction: column; gap: 6px; } .data-list article { align-items: start; flex-direction: column; } }
+@media (max-width: 800px) { .app-shell { grid-template-columns: 1fr; } aside { position: static; height: auto; } nav { grid-template-columns: repeat(2, 1fr); margin-top: 24px; } .account { margin-top: 24px; } .form-grid, .review-layout, .query-pickers { grid-template-columns: 1fr; } .notice, .query-summary { flex-direction: column; gap: 6px; } .data-list article { align-items: start; flex-direction: column; } }

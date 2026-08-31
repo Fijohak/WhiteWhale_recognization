@@ -45,6 +45,9 @@ class WorkerApi(Protocol):
     def complete(self, lease: TaskLease) -> None: ...
     def fail(self, lease: TaskLease, detail: str) -> None: ...
     def heartbeat(self, lease: TaskLease) -> None: ...
+    def download_query_image(
+        self, lease: TaskLease, query_image_id: str,
+    ) -> bytes: ...
 
 
 Handler = Callable[[TaskLease], ArtifactOutput | list[ArtifactOutput] |
@@ -218,6 +221,15 @@ class HttpWorkerApi:
         return self._request_bytes(
             "GET",
             f"api/tasks/{lease.job_id}/inputs/images/{image_id}",
+            headers={"X-Lease-Token": lease.lease_token},
+        )
+
+    def download_query_image(
+        self, lease: TaskLease, query_image_id: str,
+    ) -> bytes:
+        return self._request_bytes(
+            "GET",
+            f"api/tasks/{lease.job_id}/inputs/query-images/{query_image_id}",
             headers={"X-Lease-Token": lease.lease_token},
         )
 

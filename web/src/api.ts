@@ -139,6 +139,30 @@ export type Catalog = {
   source_batch_id: string | null; created_at: string;
 };
 
+export type QueryMatch = {
+  individual_id: string; individual_name: string; observation_id: string;
+  representative_media_url: string; score: number; support_frames: number;
+  side: string; cross_side: boolean; quality: number;
+  catalog_id: string; model_version: string;
+  calibration_status: string;
+};
+
+export type QueryResult = {
+  query_request_id: string;
+  status: "queued" | "running" | "failed" | "succeeded";
+  job_id?: string; error?: string | null; catalog_id?: string;
+  model_version?: string; calibration_status?: string;
+  human_review_status?: "candidate_only";
+  images?: Array<{
+    query_image_id: string; original_relative_path: string;
+  }>;
+  detections?: Array<{
+    query_image_id: string; crop_index: number;
+    bbox: [number, number, number, number]; quality: number;
+    matches: QueryMatch[];
+  }>;
+};
+
 type UploadStatus = {
   session_id: string;
   state: string;
@@ -278,6 +302,26 @@ export async function importSession(
     method: "POST",
     credentials: "include",
     headers: writeHeaders()
+  }));
+}
+
+export async function dispatchQuery(
+  sessionId: string,
+  request: {
+    k: number; detector_version: string; required_vram_mb: number;
+  }
+): Promise<{ query_request_id: string }> {
+  return parse(await fetch(`/api/uploads/${sessionId}/query`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...writeHeaders() },
+    body: JSON.stringify(request)
+  }));
+}
+
+export async function getQueryResult(queryId: string): Promise<QueryResult> {
+  return parse(await fetch(`/api/query/requests/${queryId}`, {
+    credentials: "include"
   }));
 }
 

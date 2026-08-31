@@ -44,6 +44,7 @@ from .imports import BatchImportService
 from .identity_changes import IdentityChangeService
 from .jobs import InvalidLease, JobConflict, JobQueueService, LeaseService
 from .media import MediaNotFound, MediaService
+from .query import QueryService
 from .review_policy import ReviewVote
 from .reviews import ReviewService
 from .training import (
@@ -103,6 +104,7 @@ class PlatformServices:
     datasets: DatasetService | None = None
     training: TrainingLifecycleService | None = None
     audit: AuditService | None = None
+    query: QueryService | None = None
 
 
 class _StrictModel(BaseModel):
@@ -177,6 +179,12 @@ class ReviewVoteRequest(_StrictModel):
 class EmbeddingQueryRequest(_StrictModel):
     embedding: list[float] = Field(min_length=1)
     k: int = Field(default=5, gt=0, le=100)
+
+
+class QueryDispatchRequest(_StrictModel):
+    k: int = Field(default=5, gt=0, le=100)
+    detector_version: str = Field(min_length=1, max_length=128)
+    required_vram_mb: int = Field(default=4096, gt=0)
 
 
 class ArchivalIngestRequest(_StrictModel):
@@ -638,6 +646,61 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
         return {"batch_id": str(batch_id)}
+
+    if services.query is not None:
+        @app.post(
+            "/api/uploads/{session_id}/query",
+            status_code=status.HTTP_201_CREATED,
+        )
+        def dispatch_query(
+            session_id: uuid.UUID,
+            body: QueryDispatchRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_upload_role(principal)
+            try:
+                query_id = services.query.dispatch_upload(
+                    session_id,
+                    owner_user_id=principal.user_id,
+                    k=body.k,
+                    detector_version=body.detector_version,
+                    required_vram_mb=body.required_vram_mb,
+                )
+            except (ValueError, CatalogValidationError, JobConflict) as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "query_submitted", actor_type="user",
+                    actor_user_id=principal.user_id,
+                    target_type="query_request", target_id=query_id,
+                    detail={"upload_session_id": str(session_id),
+                            "top_k": body.k})
+            return {"query_request_id": str(query_id)}
+
+        @app.get("/api/query/requests/{query_request_id}")
+        def get_query_result(
+            query_request_id: uuid.UUID,
+            request: Request,
+        ):
+            principal = current_principal(request)
+            try:
+                result = services.query.result(
+                    query_request_id,
+                    requester_user_id=principal.user_id,
+                    is_admin="admin" in principal.roles,
+                )
+            except (ValueError, CatalogValidationError) as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            if result.get("status") == "succeeded" \
+                    and services.audit is not None:
+                services.audit.record(
+                    "query_result_viewed", actor_type="user",
+                    actor_user_id=principal.user_id,
+                    target_type="query_request", target_id=query_request_id,
+                    detail={"catalog_id": result.get("catalog_id")})
+            return result
 
     if services.media is not None:
         @app.get("/api/media/images/{image_id}")
@@ -1654,6 +1717,34 @@ def _mount_worker_api(
                     target_type="artifact", target_id=artifact_id,
                     detail={"job_id": str(job_id)})
             return FileResponse(media.path, media_type=media.media_type)
+
+    if services.query is not None:
+        @app.get(
+            "/api/tasks/{job_id}/inputs/query-images/{query_image_id}")
+        def task_input_query_image(
+            job_id: uuid.UUID,
+            query_image_id: uuid.UUID,
+            lease_token: str = Header(alias="X-Lease-Token"),
+            worker: WorkerPrincipal = Depends(current_worker),
+        ):
+            try:
+                leases.validate(
+                    job_id, lease_token, device_id=worker.device_id)
+                path = services.query.query_image_file(
+                    job_id, query_image_id)
+            except InvalidLease as exc:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, str(exc)) from exc
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "worker_input_downloaded", actor_type="worker",
+                    actor_worker_id=worker.device_id,
+                    target_type="query_image", target_id=query_image_id,
+                    detail={"job_id": str(job_id)})
+            return FileResponse(path, media_type="application/octet-stream")
 
     @app.post(
         "/api/tasks/{job_id}/start",

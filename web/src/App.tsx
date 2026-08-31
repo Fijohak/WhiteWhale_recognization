@@ -14,11 +14,13 @@ import {
   getDashboard,
   getBatch,
   dispatchArchivalJob,
+  dispatchQuery,
   importSession,
   activateCatalog,
   getCandidate,
   getCooccurrence,
   getIdentityChange,
+  getQueryResult,
   listBatches,
   listCatalogs,
   listIndividuals,
@@ -54,13 +56,14 @@ import {
   type IdentityChange,
   type ManifestFile,
   type ModelSummary,
+  type QueryResult,
   type Relationship,
   type ReviewTask,
   type TrainingRunSummary,
   type User
 } from "./api";
 
-type Page = "overview" | "upload" | "batches" | "reviews" | "individuals"
+type Page = "overview" | "query" | "upload" | "batches" | "reviews" | "individuals"
   | "relationships" | "training" | "catalogs" | "workers" | "system";
 
 type Progress = {
@@ -81,6 +84,63 @@ async function hashBlob(blob: Blob): Promise<string> {
 async function resumeKey(batchName: string, manifest: ManifestFile[]): Promise<string> {
   const text = JSON.stringify({ batchName, manifest });
   return `whitewhale-upload-${bytesToHex(sha256(new TextEncoder().encode(text)))}`;
+}
+
+async function uploadFiles(
+  files: File[],
+  batchName: string,
+  sourceFormat: "idolphin" | "generic",
+  setProgress: (progress: Progress) => void
+): Promise<{ sessionId: string; storageKey: string }> {
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+  const manifest: ManifestFile[] = [];
+  let hashed = 0;
+  for (const file of files) {
+    setProgress({
+      stage: `正在计算哈希：${file.name}`,
+      doneBytes: hashed,
+      totalBytes
+    });
+    manifest.push({
+      relative_path: file.webkitRelativePath || file.name,
+      size_bytes: file.size,
+      sha256: await hashBlob(file)
+    });
+    hashed += file.size;
+  }
+  const storageKey = await resumeKey(batchName, manifest);
+  let sessionId = localStorage.getItem(storageKey);
+  if (sessionId) {
+    try {
+      await getUploadStatus(sessionId);
+    } catch {
+      localStorage.removeItem(storageKey);
+      sessionId = null;
+    }
+  }
+  if (!sessionId) {
+    sessionId = (await createUpload(batchName, sourceFormat, manifest)).session_id;
+    localStorage.setItem(storageKey, sessionId);
+  }
+
+  let uploaded = 0;
+  const status = await getUploadStatus(sessionId);
+  const byPath = new Map(status.files.map((file) => [file.relative_path, file]));
+  for (const browserFile of files) {
+    const path = browserFile.webkitRelativePath || browserFile.name;
+    const remote = byPath.get(path);
+    if (!remote) throw new Error(`服务器清单中缺少 ${path}`);
+    for (const partNumber of remote.missing_parts) {
+      const startOffset = partNumber * status.chunk_size;
+      const part = browserFile.slice(startOffset, startOffset + status.chunk_size);
+      setProgress({ stage: `正在上传：${path}`, doneBytes: uploaded, totalBytes });
+      await putPart(sessionId, remote.file_id, partNumber, part, await hashBlob(part));
+      uploaded += part.size;
+    }
+    if (remote.state !== "complete") await completeFile(sessionId, remote.file_id);
+  }
+  await completeSession(sessionId);
+  return { sessionId, storageKey };
 }
 
 function Login({ onLogin }: { onLogin: (user: User) => void }) {
@@ -142,56 +202,13 @@ function UploadPanel() {
     setError("");
     setMessage("");
     try {
-      const manifest: ManifestFile[] = [];
-      let hashed = 0;
-      for (const file of files) {
-        setProgress({ stage: `正在计算哈希：${file.name}`, doneBytes: hashed, totalBytes });
-        manifest.push({
-          relative_path: file.webkitRelativePath || file.name,
-          size_bytes: file.size,
-          sha256: await hashBlob(file)
-        });
-        hashed += file.size;
-      }
-      const key = await resumeKey(batchName, manifest);
-      let sessionId = localStorage.getItem(key);
-      if (sessionId) {
-        try {
-          await getUploadStatus(sessionId);
-        } catch {
-          localStorage.removeItem(key);
-          sessionId = null;
-        }
-      }
-      if (!sessionId) {
-        sessionId = (await createUpload(batchName, sourceFormat, manifest)).session_id;
-        localStorage.setItem(key, sessionId);
-      }
-
-      let uploaded = 0;
-      let status = await getUploadStatus(sessionId);
-      const byPath = new Map(status.files.map((file) => [file.relative_path, file]));
-      for (const browserFile of files) {
-        const path = browserFile.webkitRelativePath || browserFile.name;
-        const remote = byPath.get(path);
-        if (!remote) throw new Error(`服务器清单中缺少 ${path}`);
-        for (const partNumber of remote.missing_parts) {
-          const startOffset = partNumber * status.chunk_size;
-          const part = browserFile.slice(startOffset, startOffset + status.chunk_size);
-          setProgress({ stage: `正在上传：${path}`, doneBytes: uploaded, totalBytes });
-          await putPart(sessionId, remote.file_id, partNumber, part, await hashBlob(part));
-          uploaded += part.size;
-        }
-        if (remote.state !== "complete") await completeFile(sessionId, remote.file_id);
-      }
-      await completeSession(sessionId);
+      const { sessionId, storageKey } = await uploadFiles(
+        files, batchName, sourceFormat, setProgress);
       const imported = await importSession(
         sessionId, sourceFormat === "generic" ? capturedOn : undefined);
-      localStorage.removeItem(key);
+      localStorage.removeItem(storageKey);
       setProgress({ stage: "导入完成", doneBytes: totalBytes, totalBytes });
       setMessage(`批次已登记：${imported.batch_id}`);
-      status = await getUploadStatus(sessionId);
-      void status;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "上传失败");
     }
@@ -220,6 +237,121 @@ function UploadPanel() {
     {message && <p className="success">{message}</p>}
     {error && <p className="error">{error}</p>}
     <button onClick={start} disabled={!files.length || !batchName || Boolean(progress && ratio < 100)}>校验并上传</button>
+  </section>;
+}
+
+function QueryPanel() {
+  const [files, setFiles] = useState<File[]>([]);
+  const [batchName, setBatchName] = useState("");
+  const [topK, setTopK] = useState(5);
+  const [detectorVersion, setDetectorVersion] = useState("legacy-yolo-v2");
+  const [progress, setProgress] = useState<Progress | null>(null);
+  const [result, setResult] = useState<QueryResult | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [previews, setPreviews] = useState<Map<string, string>>(new Map());
+  const totalBytes = useMemo(
+    () => files.reduce((sum, file) => sum + file.size, 0), [files]);
+
+  useEffect(() => {
+    const next = new Map<string, string>();
+    for (const file of files) {
+      next.set(file.webkitRelativePath || file.name, URL.createObjectURL(file));
+    }
+    setPreviews(next);
+    return () => next.forEach((url) => URL.revokeObjectURL(url));
+  }, [files]);
+
+  async function waitForResult(queryId: string): Promise<void> {
+    for (;;) {
+      const next = await getQueryResult(queryId);
+      setResult(next);
+      if (next.status === "succeeded" || next.status === "failed") return;
+      setProgress({
+        stage: next.status === "queued" ? "等待可用 GPU Worker" : "GPU 正在检测与提取特征",
+        doneBytes: totalBytes,
+        totalBytes
+      });
+      await new Promise((resolve) => window.setTimeout(resolve, 3000));
+    }
+  }
+
+  async function start() {
+    if (!files.length || !batchName.trim()) return;
+    setBusy(true);
+    setError("");
+    setResult(null);
+    try {
+      const { sessionId, storageKey } = await uploadFiles(
+        files, batchName, "generic", setProgress);
+      const dispatched = await dispatchQuery(sessionId, {
+        k: topK,
+        detector_version: detectorVersion,
+        required_vram_mb: 4096
+      });
+      localStorage.removeItem(storageKey);
+      await waitForResult(dispatched.query_request_id);
+      setProgress({ stage: "查询完成", doneBytes: totalBytes, totalBytes });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "查询失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const imagePaths = new Map(
+    (result?.images ?? []).map((item) => [
+      item.query_image_id, item.original_relative_path
+    ]));
+  const ratio = progress && progress.totalBytes
+    ? Math.round(progress.doneBytes / progress.totalBytes * 100)
+    : 0;
+
+  return <section className="panel query-panel">
+    <div className="panel-heading">
+      <div><p className="eyebrow">BATCH QUERY</p><h2>单图 / 文件夹识别</h2></div>
+      <span className="pill">批内检测 → 历史库 Top-K</span>
+    </div>
+    <div className="notice inline-notice"><strong>结果仅为候选</strong><span>系统不会自动合并身份；跨时间个体归档仍需三名审核人独立一致。</span></div>
+    <div className="form-grid">
+      <label>查询名称<input value={batchName} onChange={(event) => setBatchName(event.target.value)} placeholder="例如 2026-08-31 航次查询" /></label>
+      <label>返回候选数<input type="number" min="1" max="100" value={topK} onChange={(event) => setTopK(Number(event.target.value))} /></label>
+      <label>Detector 版本<input value={detectorVersion} onChange={(event) => setDetectorVersion(event.target.value)} /></label>
+    </div>
+    <div className="query-pickers">
+      <label className="dropzone">
+        <input type="file" accept="image/*" multiple onChange={(event) => setFiles(Array.from(event.target.files ?? []))} />
+        <strong>选择一张或多张图片</strong><span>适合临时快速识别</span>
+      </label>
+      <label className="dropzone">
+        <input type="file" accept="image/*" multiple {...{ webkitdirectory: "", directory: "" }} onChange={(event) => setFiles(Array.from(event.target.files ?? []))} />
+        <strong>选择完整文件夹</strong><span>保留原始数据库相对路径</span>
+      </label>
+    </div>
+    {files.length > 0 && <p className="muted">已选择 {files.length} 张图片 · {(totalBytes / 1024 / 1024).toFixed(1)} MiB</p>}
+    {progress && <div className="progress"><div><span>{progress.stage}</span><strong>{ratio}%</strong></div><progress max="100" value={ratio} /></div>}
+    {error && <p className="error">{error}</p>}
+    {result?.status === "failed" && <p className="error">{result.error || "GPU 查询任务失败"}</p>}
+    <button onClick={start} disabled={busy || !files.length || !batchName.trim() || topK < 1 || topK > 100}>{busy ? "正在处理…" : "上传并开始识别"}</button>
+
+    {result?.status === "succeeded" && <div className="query-results">
+      <div className="query-summary"><strong>{result.detections?.length ?? 0} 个目标</strong><span>Model {result.model_version} · Catalog {result.catalog_id?.slice(0, 12)}… · {result.calibration_status}</span></div>
+      {(result.detections?.length ?? 0) === 0 && <p className="muted">本批图片中没有检测到可查询的海豚目标。</p>}
+      {result.detections?.map((detection) => {
+        const path = imagePaths.get(detection.query_image_id) ?? detection.query_image_id;
+        return <article className="query-detection" key={`${detection.query_image_id}-${detection.crop_index}`}>
+          <div className="query-source">
+            {previews.get(path) && <img src={previews.get(path)} alt={path} />}
+            <div><strong>{path}</strong><span>目标 #{detection.crop_index + 1} · 检测置信度 {detection.quality.toFixed(3)}</span></div>
+          </div>
+          <div className="match-grid">{detection.matches.map((match, index) => <div className="match-card" key={match.observation_id}>
+            <img src={match.representative_media_url} alt={match.individual_name} />
+            <div><strong>#{index + 1} {match.individual_name}</strong><span>相似度 {match.score.toFixed(4)} · {match.support_frames} 帧支持</span><small>{match.side || "侧别未知"}{match.cross_side ? " · 跨侧证据" : ""} · 质量 {match.quality.toFixed(2)}</small></div>
+          </div>)}</div>
+          {detection.matches.length === 0 && <p className="muted">历史 Catalog 中没有可返回的候选。</p>}
+        </article>;
+      })}
+    </div>}
   </section>;
 }
 
@@ -434,7 +566,8 @@ export default function App() {
   const canOperate = isAdmin || user.roles.includes("operator");
   const canSeeWorkers = canOperate;
   const navigation: Array<[Page, string]> = [
-    ["overview", "总览"], ["upload", "批次上传"], ["batches", "批次进度"],
+    ["overview", "总览"], ["query", "查询识别"],
+    ["upload", "批次上传"], ["batches", "批次进度"],
     ["reviews", "审核中心"], ["individuals", "个体目录"],
     ["relationships", "关系证据"], ["training", "训练与模型"],
     ["catalogs", "Catalog"],
@@ -452,6 +585,7 @@ export default function App() {
       <header><div><p className="eyebrow">M5 · DELIVERY</p><h1>海豚归档控制台</h1>{release && <small>{release.branch} · {release.commit.slice(0, 12)} · {release.deployed_at}</small>}</div><div className="status-dot">控制面在线</div></header>
       <div className="notice"><strong>候选不等于正式身份</strong><span>上传完成后，模型只生成候选结果；任何跨时间个体合并均需独立人工审核。</span></div>
       {page === "overview" && <OverviewPanel />}
+      {page === "query" && <QueryPanel />}
       {page === "upload" && <UploadPanel />}
       {page === "batches" && <BatchesPanel canDispatch={canOperate} />}
       {page === "reviews" && <ReviewPanel />}

@@ -25,6 +25,7 @@ from .imports import BatchImportService
 from .identity_changes import IdentityChangeService
 from .jobs import JobQueueService, LeaseService
 from .media import MediaService
+from .query import QueryService
 from .reviews import ReviewService
 from .storage import StorageLayout
 from .training import DatasetService, TrainingLifecycleService
@@ -89,6 +90,7 @@ class PlatformRuntime:
             training=TrainingLifecycleService(
                 self.sessions, jobs, self.storage),
             audit=AuditService(self.sessions),
+            query=QueryService(self.sessions, self.storage, jobs, catalogs),
         )
         self.app = create_app(
             readiness_probe=self.readiness,

@@ -31,6 +31,8 @@ M5 保持开发期“成员只管 push，服务器自动更新”的使用方式
 
 Web 已提供控制面总览、最近 Job/Attempt/Artifact 数量、批次 Manifest 与 Job 明细、Worker GPU/心跳/当前租约/历史次数、账号角色和审计事件。管理员可撤销设备令牌；服务器仍不向 Worker 暴露 PostgreSQL。
 
+查询页支持单图、多图或原始文件夹上传，复用 32 MiB 分片续传后创建 `query_inference` Job。4060 Laptop Worker 下载租约内图片，完成 N 目标检测和 Re-ID，使用 `manifest.json + embeddings.npy` 返回紧凑产物；服务器校验 Artifact/Header/行绑定/模型/预处理/Catalog 后，才在任务创建时固定的不可变 Catalog 上执行 Faiss Top-K。页面展示代表图、分数、支持帧、侧别/跨侧证据、质量、Model、Catalog 和校准状态，并始终标记 `candidate_only`，不会自动写入正式身份。
+
 `audit_events` 记录登录成功/失败、退出、用户与 Worker 下载、EXIF 读取、审核票、Catalog 发布/激活/回滚、模型上线以及 Worker 登记和令牌撤销。PostgreSQL 触发器拒绝对该表执行 UPDATE 或 DELETE；开发库和空库 Migration 演练都已实际验证拒绝生效。
 
 ## LAN 与 Tailscale
