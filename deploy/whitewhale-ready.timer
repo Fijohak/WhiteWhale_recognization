@@ -1,0 +1,10 @@
+[Unit]
+Description=Check WhiteWhale readiness every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Unit=whitewhale-ready.service
+
+[Install]
+WantedBy=timers.target

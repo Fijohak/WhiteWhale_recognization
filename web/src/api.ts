@@ -4,6 +4,12 @@ export type User = {
   roles: string[];
 };
 
+export type Deployment = {
+  branch: string;
+  commit: string;
+  deployed_at: string;
+};
+
 export type ManifestFile = {
   relative_path: string;
   size_bytes: number;
@@ -138,6 +144,10 @@ export async function login(username: string, password: string): Promise<User> {
 
 export async function me(): Promise<User> {
   return parse(await fetch("/api/auth/me", { credentials: "include" }));
+}
+
+export async function deployment(): Promise<Deployment> {
+  return parse(await fetch("/api/system/deployment", { credentials: "include" }));
 }
 
 export async function logout(): Promise<void> {

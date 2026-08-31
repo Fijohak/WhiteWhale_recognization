@@ -5,6 +5,7 @@ import {
   completeFile,
   completeSession,
   createUpload,
+  deployment,
   applyMultiTargetReview,
   applyIdentityChange,
   getUploadStatus,
@@ -32,6 +33,7 @@ import {
   type Catalog,
   type Cooccurrence,
   type DatasetSummary,
+  type Deployment,
   type Individual,
   type IdentityChange,
   type ManifestFile,
@@ -308,10 +310,14 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState<"upload" | "batches" | "reviews" | "individuals" | "relationships" | "training" | "catalogs">("upload");
+  const [release, setRelease] = useState<Deployment | null>(null);
 
   useEffect(() => {
     me().then(setUser).catch(() => setUser(null)).finally(() => setLoading(false));
   }, []);
+  useEffect(() => {
+    if (user) void deployment().then(setRelease).catch(() => setRelease(null));
+  }, [user]);
 
   if (loading) return <main className="loading">正在连接控制面…</main>;
   if (!user) return <Login onLogin={setUser} />;
@@ -323,7 +329,7 @@ export default function App() {
       <div className="account"><span>{user.username}</span><small>{user.roles.join(" · ")}</small><button className="quiet" onClick={() => logout().finally(() => setUser(null))}>退出</button></div>
     </aside>
     <main className="workspace">
-      <header><div><p className="eyebrow">M4 · MODEL LIFECYCLE</p><h1>海豚归档控制台</h1></div><div className="status-dot">控制面在线</div></header>
+      <header><div><p className="eyebrow">M5 · DELIVERY</p><h1>海豚归档控制台</h1>{release && <small>{release.branch} · {release.commit.slice(0, 12)} · {release.deployed_at}</small>}</div><div className="status-dot">控制面在线</div></header>
       <div className="notice"><strong>候选不等于正式身份</strong><span>上传完成后，模型只生成候选结果；任何跨时间个体合并均需独立人工审核。</span></div>
       {page === "upload" && <UploadPanel />}
       {page === "batches" && <BatchesPanel />}

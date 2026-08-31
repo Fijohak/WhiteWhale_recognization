@@ -179,6 +179,7 @@ class TestPostgresLeaseConcurrency(unittest.TestCase):
             "training_runs", "training_checkpoints",
             "evaluation_runs", "evaluation_results", "model_versions",
             "model_promotion_events", "production_model_pointer",
+            "legacy_artifacts",
         }.issubset(tables))
         command.check(config)
 

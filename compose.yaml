@@ -18,6 +18,7 @@ services:
     networks: [control]
 
   api:
+    image: whitewhale-api:${WHITEWHALE_RELEASE_TAG:-dev}
     build:
       context: .
       dockerfile: docker/api.Dockerfile
@@ -26,6 +27,9 @@ services:
       WHITEWHALE_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-whitewhale}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-whitewhale}
       WHITEWHALE_DATA_ROOT: /srv/whitewhale/data
       WHITEWHALE_REQUIRE_ACTIVE_CATALOG: ${WHITEWHALE_REQUIRE_ACTIVE_CATALOG:-false}
+      WHITEWHALE_DEPLOY_BRANCH: ${DEPLOY_BRANCH:-local}
+      WHITEWHALE_DEPLOY_COMMIT: ${WHITEWHALE_RELEASE_TAG:-dev}
+      WHITEWHALE_DEPLOYED_AT: ${WHITEWHALE_DEPLOYED_AT:-unknown}
     volumes:
       - ${WHITEWHALE_DATA_ROOT:-/srv/whitewhale/data}:/srv/whitewhale/data
     depends_on:
@@ -39,6 +43,7 @@ services:
     networks: [control]
 
   web:
+    image: whitewhale-web:${WHITEWHALE_RELEASE_TAG:-dev}
     build:
       context: .
       dockerfile: docker/web.Dockerfile

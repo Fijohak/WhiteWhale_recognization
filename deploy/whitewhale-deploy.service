@@ -1,0 +1,17 @@
+[Unit]
+Description=WhiteWhale safe branch deployment
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/whitewhale/deploy.env
+ExecStart=/srv/whitewhale/repo/deploy/deploy-release.sh
+User=whitewhale-deploy
+Group=docker
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/whitewhale /var/lock
+TimeoutStartSec=30min

@@ -465,6 +465,28 @@ class ArtifactManifest(Base):
     )
 
 
+class LegacyArtifact(TimestampMixin, Base):
+    __tablename__ = "legacy_artifacts"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    artifact_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_name: Mapped[str] = mapped_column(String(512), nullable=False)
+    relative_path: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    calibration_status: Mapped[str] = mapped_column(
+        String(64), nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict,
+                                                nullable=False)
+    __table_args__ = (
+        UniqueConstraint("artifact_kind", "sha256"),
+        CheckConstraint("size_bytes >= 0", name="nonnegative_size"),
+        CheckConstraint(
+            "calibration_status IN ('not_applicable', "
+            "'provisional_unvalidated', 'calibrated')",
+            name="valid_calibration_status"),
+    )
+
+
 class CandidateCluster(TimestampMixin, Base):
     __tablename__ = "candidate_clusters"
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)

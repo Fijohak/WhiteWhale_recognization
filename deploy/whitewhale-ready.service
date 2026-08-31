@@ -1,0 +1,7 @@
+[Unit]
+Description=WhiteWhale readiness monitor
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/whitewhale/deploy.env
+ExecStart=/usr/bin/curl --fail --silent --show-error --insecure --max-time 15 ${WHITEWHALE_READY_URL}

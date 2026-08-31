@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import date
+import os
 import uuid
 
 import numpy as np
@@ -447,6 +448,15 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
             "user_id": str(principal.user_id),
             "username": principal.username,
             "roles": sorted(principal.roles),
+        }
+
+    @app.get("/api/system/deployment")
+    def deployment(principal: Principal = Depends(current_principal)):
+        del principal
+        return {
+            "branch": os.getenv("WHITEWHALE_DEPLOY_BRANCH", "local"),
+            "commit": os.getenv("WHITEWHALE_DEPLOY_COMMIT", "dev"),
+            "deployed_at": os.getenv("WHITEWHALE_DEPLOYED_AT", "unknown"),
         }
 
     @app.post("/api/auth/logout", status_code=status.HTTP_204_NO_CONTENT)

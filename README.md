@@ -2,7 +2,7 @@
 
 基于野外调查影像，研究可靠的中华白海豚**个体识别方法**（背鳍检测 → 特征学习 → 批内分组聚类 → 跨时间匹配 → 新个体发现），并将方法**落地为辅助归档工具**：输入一批新照片自动按个体分组、每簇取最清晰的一张代表图归档，减少工作人员逐张手工整理的工作量，同时为"这只海豚见过没"提供候选匹配。模型结果一律是 **Candidate（候选）**，正式个体身份须经人工核验（human-in-the-loop）。
 
-协作平台的完整实施边界见 [PLAN.md](PLAN.md)；M1 服务器、分片上传和 Worker 控制面见 [docs/platform_m1.md](docs/platform_m1.md)，M2 GPU 归档、两轮审核与 Catalog 发布见 [docs/platform_m2.md](docs/platform_m2.md)。
+协作平台的完整实施边界见 [PLAN.md](PLAN.md)；分阶段说明见 [M1 控制面](docs/platform_m1.md)、[M2 归档](docs/platform_m2.md)、[M3 关系与身份更正](docs/platform_m3.md)、[M4 训练与模型](docs/platform_m4.md)及 [M5 部署交付](docs/platform_m5.md)。
 
 ## 1. 核心语义
 

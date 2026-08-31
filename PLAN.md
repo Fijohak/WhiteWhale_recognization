@@ -2,7 +2,7 @@
 
 本计划把现有中华白海豚检测、Re-ID、批内聚类、人工审核和单图查询代码，演进为一个以 TypeScript 网页为主要入口、Ubuntu 服务器为唯一事实源、多台成员 GPU 电脑提供计算能力的内部协作平台。系统坚持“算法只产生候选、人工确认正式身份”，并把图片、身份、审核、模型、训练数据集和 Faiss 目录全部做成可追溯、可版本化对象。
 
-> 执行状态（2026-08-31）：M1–M4 已通过分层验收，M5 交付强化实施中。控制面、上传、GPU Worker 租约、两轮归档、三人盲审、正式身份、关系证据、不可变 Catalog，以及 Detector/Re-ID 的 Dataset、训练、Checkpoint 恢复、固定评估和模型上线门禁均已落地。
+> 执行状态（2026-08-31）：M1–M4 已通过分层验收，M5 代码与本机开发部署已完成；Tailscale Serve 只剩管理员在官方控制台启用一次。控制面、上传、GPU Worker 租约、两轮归档、三人盲审、正式身份、关系证据、不可变 Catalog，以及 Detector/Re-ID 的 Dataset、训练、Checkpoint 恢复、固定评估和模型上线门禁均已落地。
 
 ## Scope
 
@@ -679,9 +679,9 @@ checksums.sha256
 - [x] **接入批内归档与两阶段审核**：封装现有检测、Crop、Embedding、HDBSCAN 和历史 Top-K；实现普通簇、多目标和跨时间身份审核政策。
 - [x] **实现正式个体、共现、疑似关系与不可变 Catalog**：完成 Observation、Identity Event、`nn_relationship`、N 目标关系、Faiss 构建、原子激活和回滚。
 - [x] **实现训练与模型生命周期**：完成 Dataset Version/Split 门禁、Detector/Re-ID Training Job、Checkpoint 恢复、评估比较、阈值标定和 Production Promotion。
-- [ ] **迁移并核验现有产物**：导入当前 Manifest、审核 CSV、r4 权重、Gallery 和 Artifact provenance；保持阈值未校准警告，不猜测跨批身份。
-- [ ] **完成部署、离线交付与安全更新**：提供 Compose、LAN/Tailscale 配置、systemd 三分钟分支部署、健康检查、release 回退、离线安装包和手动一致性导出/恢复。
-- [ ] **执行分层验收**：运行数据库约束、Worker 并发/租约、审核票型、Catalog 原子切换、训练 Split、防越权、断网运行和部署失败回退测试，记录每阶段验收证据。
+- [x] **迁移并核验现有产物**：导入当前 Manifest、审核 CSV、r4 权重、Gallery 和 Artifact provenance；保持阈值未校准警告，不猜测跨批身份。
+- [x] **完成部署、离线交付与安全更新**：提供 Compose、LAN/Tailscale 配置、systemd 三分钟分支部署、健康检查、release 回退、离线安装包和手动一致性导出/恢复。
+- [x] **执行分层验收**：运行数据库约束、Worker 并发/租约、审核票型、Catalog 原子切换、训练 Split、防越权、断网运行和部署失败回退测试，记录每阶段验收证据。
 
 ## 20. 实施里程碑
 
