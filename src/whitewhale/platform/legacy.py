@@ -65,7 +65,7 @@ class LegacyReleaseImportResult:
 
 class LegacyImportService:
     ALLOWED_KINDS = {
-        "dataset_manifest", "review_csv", "model_weights",
+        "dataset_manifest", "pilot_set", "review_csv", "model_weights",
         "gallery_embeddings", "gallery_metadata", "artifact_manifest",
     }
 

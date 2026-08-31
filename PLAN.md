@@ -679,7 +679,7 @@ checksums.sha256
 - [x] **接入批内归档与两阶段审核**：封装现有检测、Crop、Embedding、HDBSCAN 和历史 Top-K；实现普通簇、多目标和跨时间身份审核政策。
 - [x] **实现正式个体、共现、疑似关系与不可变 Catalog**：完成 Observation、Identity Event、`nn_relationship`、N 目标关系、Faiss 构建、原子激活和回滚。
 - [x] **实现训练与模型生命周期**：完成 Dataset Version/Split 门禁、Detector/Re-ID Training Job、Checkpoint 恢复、评估比较、阈值标定和 Production Promotion。
-- [x] **迁移并核验现有产物**：导入当前 Manifest、审核 CSV、r4 权重、Gallery 和 Artifact provenance；保持阈值未校准警告，不猜测跨批身份。
+- [ ] **迁移并核验现有产物**：Manifest、Pilot Set、r4 权重、Gallery 和 Artifact provenance 已导入，并保持阈值未校准警告与批次身份隔离；现有工作区没有文档中提到的最终审核 CSV/身份迁移表，需取得真实文件后再登记，不能伪造。
 - [ ] **完成部署、离线交付与安全更新**：Compose、systemd 三分钟分支部署、健康检查、release 回退和手动一致性导出/恢复已完成；仍需补齐部署失败原因、真实最小测试、离线包规定结构和 Tailscale Serve 启用。
 - [ ] **完成 Web/API 管理面与全量审计**：补齐总览、查询、Worker、系统以及 Job/Artifact/模型评估与回滚视图，并覆盖登录、下载、EXIF、审核、发布、回滚和令牌撤销的不可变审计事件。
 - [ ] **执行最终分层验收**：现有自动化回归已覆盖数据库约束、Worker 租约、审核票型、Catalog、Split、防越权与恢复演练；仍需补齐约 3000 张真实批次的断网端到端流程与部署失败回退实测证据。
