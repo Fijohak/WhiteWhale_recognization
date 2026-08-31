@@ -2,8 +2,8 @@
 
 ## 自动化结果
 
-- 后端完整回归：326 passed，85 subtests passed；仅保留 Starlette TestClient/httpx 的上游弃用警告。
-- M5 分层入口：32 passed。
+- 后端完整回归：331 passed，85 subtests passed；仅保留 Starlette TestClient/httpx 的上游弃用警告。
+- M5 分层入口：34 passed。
 - React/TypeScript：`tsc -b && vite build` 通过，生产 JS 约 170 kB。
 - npm 高危审计：0 vulnerabilities。
 - PostgreSQL：从空 schema 连续升级到 `e21a6f8c4d93` 成功，开发库与空库 `alembic check` 均无漂移；审计表 UPDATE/DELETE 均被数据库触发器拒绝。
@@ -23,7 +23,7 @@
 - 一致性导出包完成成员与 SHA-256 校验，并成功恢复到隔离数据库 `whitewhale_restore_m5`：Alembic revision 为 `d20f4ea783b2`、Legacy Artifact 为 5 项、文件库恢复 5 个文件。
 - 演练产生的临时 tar 与文件副本已移入桌面回收站，可恢复；隔离恢复数据库保留供管理员抽查。
 
-当前文档中的 326 项全量回归是 `d20` 快照证据；`e21` 之后已通过审计/管理 API、Worker API、基础模型、M5 脚本的 16 项聚焦回归与前端构建。最终交付前仍需重新运行全量回归和约 3000 张真实批次断网端到端验收。
+`e21` 当前快照已重新完成 331 项全量回归、85 项子测试、34 项 M5 分层验收和前端生产构建。最终交付前仍需完成约 3000 张真实批次的断网端到端验收。
 
 ## 尚需管理员完成的一次性外部动作
 
