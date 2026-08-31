@@ -29,7 +29,9 @@ M5 保持开发期“成员只管 push，服务器自动更新”的使用方式
 
 ## 管理面与审计
 
-Web 已提供控制面总览、最近 Job/Attempt/Artifact 数量、批次 Manifest 与 Job 明细、Worker GPU/心跳/当前租约/历史次数、账号角色和审计事件。管理员可撤销设备令牌；服务器仍不向 Worker 暴露 PostgreSQL。
+Web 已提供控制面总览、Job/Attempt/Artifact Header 与输入 Manifest 详情、批次 Manifest 与 Job 明细、模型固定评估/生产比较/标定阈值/上线事件详情、Worker GPU/心跳/当前租约/历史次数、账号角色和审计事件。管理员可撤销设备令牌；服务器仍不向 Worker 暴露 PostgreSQL。
+
+Reviewer 可把曾经通过上线门禁的 retired 模型回滚为 Production。服务器会重新校验权重摘要和历史上线事件；Re-ID 模型还要求管理员先激活同 Model Version、同 Feature Dim 的不可变 Catalog。不兼容 Catalog 会直接拒绝回滚，成功操作追加 `rollback_to_production` 领域事件和 `model_rollback` 审计事件。
 
 查询页支持单图、多图或原始文件夹上传，复用 32 MiB 分片续传后创建 `query_inference` Job。4060 Laptop Worker 下载租约内图片，完成 N 目标检测和 Re-ID，使用 `manifest.json + embeddings.npy` 返回紧凑产物；服务器校验 Artifact/Header/行绑定/模型/预处理/Catalog 后，才在任务创建时固定的不可变 Catalog 上执行 Faiss Top-K。页面展示代表图、分数、支持帧、侧别/跨侧证据、质量、Model、Catalog 和校准状态，并始终标记 `candidate_only`，不会自动写入正式身份。
 

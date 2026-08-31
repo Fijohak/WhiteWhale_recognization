@@ -45,6 +45,31 @@ export type JobSummary = {
   lease_expires_at: string | null; last_error: string | null; created_at: string;
 };
 
+export type JobDetail = {
+  job_id: string; batch_id: string | null; task_type: string; state: string;
+  priority: number; required_vram_mb: number;
+  required_model_version: string | null; max_attempts: number;
+  idempotency_key: string; input_manifest: Record<string, unknown>;
+  created_at: string;
+  attempts: Array<{
+    attempt_id: string; attempt_number: number; worker_device_id: string | null;
+    started_at: string | null; finished_at: string | null;
+    outcome: string | null; error_detail: string | null;
+  }>;
+  artifacts: Array<{
+    artifact_id: string; attempt_id: string; artifact_type: string;
+    sha256: string; size_bytes: number; producer_device_id: string;
+    schema_version: number | null; model_version: string | null;
+    detector_version: string | null; preprocess_id: string | null;
+    pipeline_config_digest: string | null; row_binding_digest: string | null;
+    created_at: string;
+  }>;
+  events: Array<{
+    event_id: number; attempt_id: string | null; event_type: string;
+    payload: Record<string, unknown>; created_at: string;
+  }>;
+};
+
 export type WorkerSummary = {
   device_id: string; name: string; gpu_model: string; vram_mb: number;
   cuda_version: string; worker_version: string; capabilities: string[];
@@ -126,6 +151,25 @@ export type ModelSummary = {
   status: string; sha256: string; feature_dim: number | null;
   preprocess_id: string; calibrated_thresholds: Record<string, number>;
   completed_evaluations: number; created_at: string;
+};
+
+export type ModelDetail = ModelSummary & {
+  training_run_id: string; weight_artifact_id: string; is_production: boolean;
+  checkpoint_source: string; license: string;
+  compatible_detector_version: string | null;
+  compatible_crop_config: string; compatible_index_schema: number;
+  evaluations: Array<{
+    evaluation_run_id: string; job_id: string; dataset_version_id: string;
+    protocol: string; status: string; job_state: string;
+    report_artifact_id: string | null; metrics: Record<string, number>;
+    comparison: Record<string, unknown>;
+    calibrated_thresholds: Record<string, number>; created_at: string;
+  }>;
+  promotion_events: Array<{
+    event_id: string; event_type: string; actor_user_id: string;
+    catalog_id: string | null; payload: Record<string, unknown>;
+    created_at: string;
+  }>;
 };
 
 export type Individual = {
@@ -360,6 +404,10 @@ export async function listJobs(): Promise<JobSummary[]> {
   return parse(await fetch("/api/jobs", { credentials: "include" }));
 }
 
+export async function getJob(jobId: string): Promise<JobDetail> {
+  return parse(await fetch(`/api/jobs/${jobId}`, { credentials: "include" }));
+}
+
 export async function listWorkers(): Promise<WorkerSummary[]> {
   return parse(await fetch("/api/workers", { credentials: "include" }));
 }
@@ -438,8 +486,20 @@ export async function listModels(): Promise<ModelSummary[]> {
   return parse(await fetch("/api/models", { credentials: "include" }));
 }
 
+export async function getModel(modelId: string): Promise<ModelDetail> {
+  return parse(await fetch(`/api/models/${modelId}`, {
+    credentials: "include"
+  }));
+}
+
 export async function requestModelPromotion(modelId: string): Promise<{ catalog_rebuild_job_id: string | null }> {
   return parse(await fetch(`/api/models/${modelId}/request-promotion`, {
+    method: "POST", credentials: "include", headers: writeHeaders()
+  }));
+}
+
+export async function rollbackModel(modelId: string): Promise<void> {
+  await parse(await fetch(`/api/models/${modelId}/rollback`, {
     method: "POST", credentials: "include", headers: writeHeaders()
   }));
 }

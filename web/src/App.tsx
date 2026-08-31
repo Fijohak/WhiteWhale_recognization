@@ -13,6 +13,7 @@ import {
   getUploadStatus,
   getDashboard,
   getBatch,
+  getJob,
   dispatchArchivalJob,
   dispatchQuery,
   importSession,
@@ -20,6 +21,7 @@ import {
   getCandidate,
   getCooccurrence,
   getIdentityChange,
+  getModel,
   getQueryResult,
   listBatches,
   listCatalogs,
@@ -37,6 +39,7 @@ import {
   me,
   putPart,
   requestModelPromotion,
+  rollbackModel,
   revokeWorker,
   reviewInbox,
   submitVote,
@@ -44,6 +47,7 @@ import {
   type BatchDetail,
   type Dashboard,
   type JobSummary,
+  type JobDetail,
   type WorkerSummary,
   type UserSummary,
   type AuditEvent,
@@ -56,6 +60,7 @@ import {
   type IdentityChange,
   type ManifestFile,
   type ModelSummary,
+  type ModelDetail,
   type QueryResult,
   type Relationship,
   type ReviewTask,
@@ -358,6 +363,7 @@ function QueryPanel() {
 function OverviewPanel() {
   const [summary, setSummary] = useState<Dashboard | null>(null);
   const [jobs, setJobs] = useState<JobSummary[]>([]);
+  const [jobDetail, setJobDetail] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
     Promise.all([getDashboard(), listJobs()])
@@ -374,7 +380,8 @@ function OverviewPanel() {
       <article className="individual-card"><strong>{summary.failed_jobs}</strong><span>异常终态任务</span></article>
     </div>}
     <h3 className="subheading">最近任务</h3>
-    <div className="data-list">{jobs.map((job) => <article key={job.job_id}><div><strong>{job.task_type}</strong><span>{job.job_id.slice(0, 12)}… · {new Date(job.created_at).toLocaleString()}</span>{job.last_error && <small className="error">{job.last_error}</small>}</div><div className="metrics"><b>{job.attempt_count} 次尝试</b><b>{job.artifact_count} 个产物</b><span className="pill">{job.state}</span></div></article>)}</div>
+    <div className="data-list clickable-list">{jobs.map((job) => <article key={job.job_id} onClick={() => getJob(job.job_id).then(setJobDetail).catch((reason) => setError(String(reason)))}><div><strong>{job.task_type}</strong><span>{job.job_id.slice(0, 12)}… · {new Date(job.created_at).toLocaleString()}</span>{job.last_error && <small className="error">{job.last_error}</small>}</div><div className="metrics"><b>{job.attempt_count} 次尝试</b><b>{job.artifact_count} 个产物</b><span className="pill">{job.state}</span></div></article>)}</div>
+    {jobDetail && <div className="review-detail detail-block"><div className="panel-heading"><h3>Job {jobDetail.job_id}</h3><span className="pill">{jobDetail.state}</span></div><p className="muted">{jobDetail.task_type} · 最低显存 {jobDetail.required_vram_mb} MiB · 模型 {jobDetail.required_model_version ?? "不限定"}</p><h4>Attempt</h4><div className="data-list compact">{jobDetail.attempts.map((attempt) => <article key={attempt.attempt_id}><div><strong>#{attempt.attempt_number} · {attempt.outcome ?? "pending"}</strong><span>Worker {attempt.worker_device_id ?? "未分配"}</span>{attempt.error_detail && <small className="error">{attempt.error_detail}</small>}</div></article>)}</div><h4>Artifact</h4><div className="data-list compact">{jobDetail.artifacts.map((artifact) => <article key={artifact.artifact_id}><div><strong>{artifact.artifact_type}</strong><span>{(artifact.size_bytes / 1024 / 1024).toFixed(2)} MiB · SHA-256 {artifact.sha256.slice(0, 16)}…</span><small>{artifact.model_version ?? "无模型版本"} · schema {artifact.schema_version ?? "-"}</small></div></article>)}</div><h4>输入 Manifest</h4><pre className="plan-preview">{JSON.stringify(jobDetail.input_manifest, null, 2)}</pre></div>}
   </section>;
 }
 
@@ -526,6 +533,7 @@ function TrainingPanel() {
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [runs, setRuns] = useState<TrainingRunSummary[]>([]);
   const [models, setModels] = useState<ModelSummary[]>([]);
+  const [modelDetail, setModelDetail] = useState<ModelDetail | null>(null);
   const [message, setMessage] = useState("");
   const refresh = () => Promise.all([
     listDatasets().then(setDatasets),
@@ -544,7 +552,17 @@ function TrainingPanel() {
       setMessage(reason instanceof Error ? reason.message : "上线请求失败");
     }
   }
-  return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">TRAINING LIFECYCLE</p><h2>数据集、训练与模型</h2></div><span className="pill">服务器只调度 · GPU 在 Worker</span></div><div className="notice inline-notice"><strong>测试集冻结</strong><span>训练 Worker 只能下载 train / val / calibration；Production 必须完成固定 test、生产比较、阈值标定和兼容 Catalog 重建。</span></div>{message && <p className={message.includes("失败") || message.includes("尚未") ? "error" : "success"}>{message}</p>}<h3 className="subheading">Dataset Versions</h3><div className="data-list">{datasets.map((item) => <article key={item.dataset_version_id}><div><strong>{item.name}</strong><span>{item.protocol} · {item.membership_digest.slice(0, 12)}…</span></div><div className="metrics"><b>{item.sample_count} 样本</b>{Object.entries(item.split_counts).map(([split, count]) => <small key={split}>{split}: {count}</small>)}<span className="pill">{item.status}</span></div></article>)}</div><h3 className="subheading">Training Runs</h3><div className="data-list">{runs.map((item) => <article key={item.training_run_id}><div><strong>{item.model_family} · {item.task_type}</strong><span>seed {item.seed} · {new Date(item.created_at).toLocaleString()}</span></div><div className="metrics"><span className="pill">{item.job_state}</span></div></article>)}</div><h3 className="subheading">Model Versions</h3><div className="data-list">{models.map((item) => <article key={item.model_version_id}><div><strong>{item.version}</strong><span>{item.model_family} · {item.feature_dim ?? "-"} 维 · {item.completed_evaluations} 次固定评估</span></div><div className="metrics"><span className="pill">{item.status}</span>{item.status === "candidate" && <button onClick={() => promote(item.model_version_id)}>请求上线门禁</button>}</div></article>)}</div></section>;
+  async function rollback(modelId: string) {
+    try {
+      await rollbackModel(modelId);
+      setMessage("模型已回滚为 Production；操作已写入不可变事件和审计。");
+      await refresh();
+      setModelDetail(await getModel(modelId));
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "模型回滚失败");
+    }
+  }
+  return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">TRAINING LIFECYCLE</p><h2>数据集、训练与模型</h2></div><span className="pill">服务器只调度 · GPU 在 Worker</span></div><div className="notice inline-notice"><strong>测试集冻结</strong><span>训练 Worker 只能下载 train / val / calibration；Production 必须完成固定 test、生产比较、阈值标定和兼容 Catalog 重建。</span></div>{message && <p className={message.includes("失败") || message.includes("尚未") || message.includes("必须") ? "error" : "success"}>{message}</p>}<h3 className="subheading">Dataset Versions</h3><div className="data-list">{datasets.map((item) => <article key={item.dataset_version_id}><div><strong>{item.name}</strong><span>{item.protocol} · {item.membership_digest.slice(0, 12)}…</span></div><div className="metrics"><b>{item.sample_count} 样本</b>{Object.entries(item.split_counts).map(([split, count]) => <small key={split}>{split}: {count}</small>)}<span className="pill">{item.status}</span></div></article>)}</div><h3 className="subheading">Training Runs</h3><div className="data-list">{runs.map((item) => <article key={item.training_run_id}><div><strong>{item.model_family} · {item.task_type}</strong><span>seed {item.seed} · {new Date(item.created_at).toLocaleString()}</span></div><div className="metrics"><span className="pill">{item.job_state}</span></div></article>)}</div><h3 className="subheading">Model Versions</h3><div className="data-list clickable-list">{models.map((item) => <article key={item.model_version_id} onClick={() => getModel(item.model_version_id).then(setModelDetail).catch((reason) => setMessage(String(reason)))}><div><strong>{item.version}</strong><span>{item.model_family} · {item.feature_dim ?? "-"} 维 · {item.completed_evaluations} 次固定评估</span></div><div className="metrics"><span className="pill">{item.status}</span>{item.status === "candidate" && <button onClick={(event) => { event.stopPropagation(); void promote(item.model_version_id); }}>请求上线门禁</button>}{item.status === "retired" && <button className="danger" onClick={(event) => { event.stopPropagation(); void rollback(item.model_version_id); }}>回滚为 Production</button>}</div></article>)}</div>{modelDetail && <div className="review-detail detail-block"><div className="panel-heading"><div><h3>{modelDetail.version}</h3><p className="muted">{modelDetail.model_family} · {modelDetail.sha256}</p></div><span className="pill">{modelDetail.is_production ? "Production" : modelDetail.status}</span></div><div className="manifest-grid"><span>Feature Dim<strong>{modelDetail.feature_dim ?? "-"}</strong></span><span>Preprocess<strong>{modelDetail.preprocess_id}</strong></span><span>Index Schema<strong>{modelDetail.compatible_index_schema}</strong></span><span>License<strong>{modelDetail.license}</strong></span></div><h4>固定评估与阈值</h4>{modelDetail.evaluations.length === 0 ? <p className="muted">尚无固定评估。</p> : modelDetail.evaluations.map((evaluation) => <div className="evaluation-card" key={evaluation.evaluation_run_id}><div className="panel-heading"><strong>{evaluation.protocol}</strong><span className="pill">{evaluation.status} / {evaluation.job_state}</span></div><div className="metrics-table">{Object.entries(evaluation.metrics).map(([name, value]) => <span key={name}>{name}<strong>{value.toFixed(4)}</strong></span>)}</div><p className="muted">阈值：{JSON.stringify(evaluation.calibrated_thresholds)}</p><pre className="plan-preview">{JSON.stringify(evaluation.comparison, null, 2)}</pre></div>)}<h4>上线 / 回滚事件</h4><div className="data-list compact">{modelDetail.promotion_events.map((event) => <article key={event.event_id}><div><strong>{event.event_type}</strong><span>{new Date(event.created_at).toLocaleString()} · Catalog {event.catalog_id?.slice(0, 12) ?? "-"}</span></div></article>)}</div></div>}</section>;
 }
 
 export default function App() {

@@ -20,7 +20,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from whitewhale.platform.auth import AuthService  # noqa: E402
-from whitewhale.platform.catalogs import build_flat_ip_index  # noqa: E402
+from whitewhale.platform.catalogs import (  # noqa: E402
+    CatalogEntry, CatalogService, build_flat_ip_index,
+)
 from whitewhale.platform.jobs import JobQueueService  # noqa: E402
 from whitewhale.platform.media import MediaNotFound, MediaService  # noqa: E402
 from whitewhale.platform.models import (  # noqa: E402
@@ -35,6 +37,7 @@ from whitewhale.platform.training import (  # noqa: E402
     DatasetSampleSpec, DatasetService, ModelManifest,
     TrainingLifecycleService,
 )
+from whitewhale.platform.views import ArchiveReadService  # noqa: E402
 
 
 TEST_DATABASE_URL = os.getenv("WHITEWHALE_TEST_DATABASE_URL")
@@ -323,6 +326,63 @@ class TestTrainingLifecycle(unittest.TestCase):
             self.assertEqual(model.status, "production")
             pointer = db.get(ProductionModelPointer, "metric-learning")
             self.assertEqual(pointer.model_version_id, model_id)
+        model_detail = ArchiveReadService(self.sessions).model(model_id)
+        self.assertTrue(model_detail["is_production"])
+        self.assertEqual(
+            model_detail["evaluations"][0]["metrics"]["rank1"], 0.82)
+        self.assertEqual(
+            model_detail["evaluations"][0]["calibrated_thresholds"],
+            thresholds)
+        job_detail = ArchiveReadService(self.sessions).job(rebuild_job_id)
+        self.assertEqual(job_detail["task_type"], "catalog_rebuild")
+        self.assertEqual(job_detail["artifacts"][0]["artifact_type"],
+                         "catalog_rebuild")
+        self.assertEqual(job_detail["attempts"][0]["outcome"], "succeeded")
+
+        next_run_id, next_job_id = lifecycle.dispatch_training(
+            dataset_id, task_type="reid_training",
+            model_family="metric-learning", base_model_id=model_id,
+            config={"epochs": 2}, seed=12, required_vram_mb=4096,
+            max_runtime_seconds=3600, checkpoint_interval_steps=50)
+        next_weights = b"next-production-model"
+        next_artifact_id = self._artifact_for_job(
+            next_job_id, "model_weights", next_weights)
+        next_model_id = lifecycle.register_model(
+            next_run_id, next_artifact_id, ModelManifest(
+                model_family="metric-learning", version="reid-r6-current",
+                sha256=hashlib.sha256(next_weights).hexdigest(),
+                feature_dim=256, preprocess_id="crop-v2",
+                checkpoint_source="training_run", license="project_internal",
+                compatible_detector_version="det-v2",
+                compatible_crop_config="crop-config-v2",
+                compatible_index_schema=1))
+        with self.sessions.begin() as db:
+            db.get(ModelVersion, model_id).status = "retired"
+            db.get(ModelVersion, next_model_id).status = "production"
+            db.get(ProductionModelPointer, "metric-learning").model_version_id = \
+                next_model_id
+        catalogs = CatalogService(self.sessions, self.storage)
+        next_catalog_id = catalogs.stage(
+            [CatalogEntry(observation_id, vector)
+             for observation_id, vector in zip(
+                 self.observation_ids, vectors, strict=True)],
+            model_version="reid-r6-current",
+            calibration_status="calibrated",
+            index_bytes=build_flat_ip_index(vectors),
+        )
+        catalogs.activate(next_catalog_id)
+        with self.assertRaisesRegex(ValueError, "Catalog"):
+            lifecycle.rollback_production(model_id, self.reviewer.id)
+        catalogs.activate(catalog_id)
+        lifecycle.rollback_production(model_id, self.reviewer.id)
+        with self.sessions() as db:
+            self.assertEqual(db.get(ModelVersion, model_id).status,
+                             "production")
+            self.assertEqual(db.get(ModelVersion, next_model_id).status,
+                             "retired")
+            self.assertEqual(db.get(
+                ProductionModelPointer, "metric-learning").model_version_id,
+                model_id)
 
     def test_detector_model_promotes_without_embedding_catalog(self):
         dataset_id = self._freeze_dataset()

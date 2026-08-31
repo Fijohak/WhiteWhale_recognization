@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, aliased, sessionmaker
 from .models import (
     Batch,
     Artifact,
+    ArtifactManifest,
     CandidateCluster,
     CandidateClusterMember,
     ConfirmedIndividual,
@@ -20,12 +21,15 @@ from .models import (
     DatasetSplit,
     DatasetVersion,
     EvaluationRun,
+    EvaluationResult,
     Image,
     IdentityChangeProposal,
     IndividualAlias,
     MatchCandidate,
     ModelVersion,
+    ModelPromotionEvent,
     Observation,
+    ProductionModelPointer,
     RelationshipEvidence,
     RelationshipHypothesis,
     ReviewerRoster,
@@ -33,6 +37,7 @@ from .models import (
     TrainingRun,
     Job,
     JobAttempt,
+    JobEvent,
     JobLease,
     Role,
     User,
@@ -138,6 +143,80 @@ class ArchiveReadService:
                     "created_at": job.created_at.isoformat(),
                 })
             return result
+
+    def job(self, job_id: uuid.UUID) -> dict:
+        with self._sessions() as db:
+            job = db.get(Job, job_id)
+            if job is None:
+                raise ValueError("Job 不存在")
+            attempts = list(db.scalars(select(JobAttempt).where(
+                JobAttempt.job_id == job_id).order_by(
+                    JobAttempt.attempt_number)))
+            artifacts = list(db.execute(
+                select(Artifact, ArtifactManifest)
+                .outerjoin(
+                    ArtifactManifest,
+                    ArtifactManifest.artifact_id == Artifact.id)
+                .where(Artifact.job_id == job_id)
+                .order_by(Artifact.created_at, Artifact.id)
+            ))
+            events = list(db.scalars(select(JobEvent).where(
+                JobEvent.job_id == job_id).order_by(
+                    JobEvent.created_at, JobEvent.id)))
+            return {
+                "job_id": str(job.id),
+                "batch_id": str(job.batch_id) if job.batch_id else None,
+                "task_type": job.task_type,
+                "state": job.state.value,
+                "priority": job.priority,
+                "required_vram_mb": job.required_vram_mb,
+                "required_model_version": job.required_model_version,
+                "max_attempts": job.max_attempts,
+                "idempotency_key": job.idempotency_key,
+                "input_manifest": job.input_manifest,
+                "created_at": job.created_at.isoformat(),
+                "attempts": [{
+                    "attempt_id": str(attempt.id),
+                    "attempt_number": attempt.attempt_number,
+                    "worker_device_id": str(attempt.worker_device_id)
+                    if attempt.worker_device_id else None,
+                    "started_at": attempt.started_at.isoformat()
+                    if attempt.started_at else None,
+                    "finished_at": attempt.finished_at.isoformat()
+                    if attempt.finished_at else None,
+                    "outcome": attempt.outcome,
+                    "error_detail": attempt.error_detail,
+                } for attempt in attempts],
+                "artifacts": [{
+                    "artifact_id": str(artifact.id),
+                    "attempt_id": str(artifact.attempt_id),
+                    "artifact_type": artifact.artifact_type,
+                    "sha256": artifact.sha256,
+                    "size_bytes": artifact.size_bytes,
+                    "producer_device_id": str(artifact.producer_device_id),
+                    "schema_version": manifest.schema_version
+                    if manifest else None,
+                    "model_version": manifest.model_version
+                    if manifest else None,
+                    "detector_version": manifest.detector_version
+                    if manifest else None,
+                    "preprocess_id": manifest.preprocess_id
+                    if manifest else None,
+                    "pipeline_config_digest":
+                    manifest.pipeline_config_digest if manifest else None,
+                    "row_binding_digest": manifest.row_binding_digest
+                    if manifest else None,
+                    "created_at": artifact.created_at.isoformat(),
+                } for artifact, manifest in artifacts],
+                "events": [{
+                    "event_id": event.id,
+                    "attempt_id": str(event.attempt_id)
+                    if event.attempt_id else None,
+                    "event_type": event.event_type,
+                    "payload": event.payload,
+                    "created_at": event.created_at.isoformat(),
+                } for event in events],
+            }
 
     def workers(self) -> list[dict]:
         online_after = datetime.now(UTC) - timedelta(minutes=5)
@@ -435,6 +514,76 @@ class ArchiveReadService:
                 "completed_evaluations": count,
                 "created_at": model.created_at.isoformat(),
             } for model, count in rows]
+
+    def model(self, model_version_id: uuid.UUID) -> dict:
+        with self._sessions() as db:
+            model = db.get(ModelVersion, model_version_id)
+            if model is None:
+                raise ValueError("Model Version 不存在")
+            pointer = db.get(ProductionModelPointer, model.model_family)
+            evaluations = list(db.execute(
+                select(EvaluationRun, Job)
+                .join(Job, Job.id == EvaluationRun.job_id)
+                .where(EvaluationRun.model_version_id == model.id)
+                .order_by(EvaluationRun.created_at.desc())
+            ))
+            evaluation_bodies = []
+            for evaluation, job in evaluations:
+                metrics = {
+                    result.metric_name: result.value
+                    for result in db.scalars(select(EvaluationResult).where(
+                        EvaluationResult.evaluation_run_id == evaluation.id)
+                        .order_by(EvaluationResult.metric_name))
+                }
+                evaluation_bodies.append({
+                    "evaluation_run_id": str(evaluation.id),
+                    "job_id": str(evaluation.job_id),
+                    "dataset_version_id": str(evaluation.dataset_version_id),
+                    "protocol": evaluation.protocol,
+                    "status": evaluation.status,
+                    "job_state": job.state.value,
+                    "report_artifact_id": str(evaluation.report_artifact_id)
+                    if evaluation.report_artifact_id else None,
+                    "metrics": metrics,
+                    "comparison": evaluation.comparison,
+                    "calibrated_thresholds":
+                    evaluation.calibrated_thresholds,
+                    "created_at": evaluation.created_at.isoformat(),
+                })
+            events = list(db.scalars(select(ModelPromotionEvent).where(
+                ModelPromotionEvent.model_version_id == model.id).order_by(
+                    ModelPromotionEvent.created_at)))
+            return {
+                "model_version_id": str(model.id),
+                "training_run_id": str(model.training_run_id),
+                "weight_artifact_id": str(model.weight_artifact_id),
+                "model_family": model.model_family,
+                "version": model.version,
+                "status": model.status,
+                "is_production": bool(
+                    pointer and pointer.model_version_id == model.id),
+                "sha256": model.sha256,
+                "feature_dim": model.feature_dim,
+                "preprocess_id": model.preprocess_id,
+                "checkpoint_source": model.checkpoint_source,
+                "license": model.license,
+                "compatible_detector_version":
+                model.compatible_detector_version,
+                "compatible_crop_config": model.compatible_crop_config,
+                "compatible_index_schema": model.compatible_index_schema,
+                "calibrated_thresholds": model.calibrated_thresholds,
+                "evaluations": evaluation_bodies,
+                "promotion_events": [{
+                    "event_id": str(event.id),
+                    "event_type": event.event_type,
+                    "actor_user_id": str(event.actor_user_id),
+                    "catalog_id": str(event.catalog_id)
+                    if event.catalog_id else None,
+                    "payload": event.payload,
+                    "created_at": event.created_at.isoformat(),
+                } for event in events],
+                "created_at": model.created_at.isoformat(),
+            }
 
     def individuals(self) -> list[dict]:
         with self._sessions() as db:

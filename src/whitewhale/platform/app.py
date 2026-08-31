@@ -777,6 +777,15 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
+        @app.get("/api/jobs/{job_id}")
+        def get_job(job_id: uuid.UUID, request: Request):
+            current_principal(request)
+            try:
+                return services.views.job(job_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
         @app.get("/api/workers")
         def list_workers(request: Request):
             principal = current_principal(request)
@@ -843,6 +852,15 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
         def list_models(request: Request):
             current_principal(request)
             return services.views.models()
+
+        @app.get("/api/models/{model_id}")
+        def get_model(model_id: uuid.UUID, request: Request):
+            current_principal(request)
+            try:
+                return services.views.model(model_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, str(exc)) from exc
 
         @app.get("/api/individuals")
         def list_individuals(request: Request):
@@ -1420,6 +1438,25 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
                             if job_id else None})
             return {"catalog_rebuild_job_id": (
                 str(job_id) if job_id is not None else None)}
+
+        @app.post("/api/models/{model_id}/rollback")
+        def rollback_model(
+            model_id: uuid.UUID,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_reviewer(principal)
+            try:
+                services.training.rollback_production(
+                    model_id, principal.user_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "model_rollback", actor_type="user",
+                    actor_user_id=principal.user_id,
+                    target_type="model_version", target_id=model_id)
+            return {"status": "production"}
 
         @app.post("/api/models/{model_id}/complete-promotion")
         def complete_model_promotion(

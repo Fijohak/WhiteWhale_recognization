@@ -774,6 +774,66 @@ class TrainingLifecycleService:
                          if previous_id else None},
             ))
 
+    def rollback_production(
+        self,
+        model_version_id: uuid.UUID,
+        reviewer_user_id: uuid.UUID,
+    ) -> None:
+        """将曾经上线的 retired 模型切回 Production。"""
+        self._require_reviewer(reviewer_user_id)
+        with self._sessions.begin() as db:
+            target = db.get(
+                ModelVersion, model_version_id, with_for_update=True)
+            if target is None or target.status != "retired":
+                raise ValueError("模型回滚目标必须是 retired Model Version")
+            prior_promotion = db.scalar(select(ModelPromotionEvent.id).where(
+                ModelPromotionEvent.model_version_id == target.id,
+                ModelPromotionEvent.event_type.in_((
+                    "promoted_to_production", "rollback_to_production")),
+            ).limit(1))
+            if prior_promotion is None:
+                raise ValueError("模型从未通过 Production 上线门禁")
+            self._verify_model_file(target)
+            pointer = db.get(
+                ProductionModelPointer, target.model_family,
+                with_for_update=True)
+            if pointer is None or pointer.model_version_id == target.id:
+                raise ValueError("模型族没有可回滚的其他 Production 版本")
+            current = db.get(
+                ModelVersion, pointer.model_version_id,
+                with_for_update=True)
+            if current is None or current.status != "production" \
+                    or current.model_family != target.model_family:
+                raise ValueError("当前 Production Model 指针无效")
+
+            catalog_id = None
+            if target.feature_dim is not None:
+                catalog_id = db.scalar(select(
+                    ActiveCatalogPointer.catalog_id).where(
+                        ActiveCatalogPointer.singleton_id == 1))
+                catalog = db.get(CatalogVersion, catalog_id) \
+                    if catalog_id else None
+                if catalog is None or catalog.status != "active" \
+                        or catalog.model_version != target.version \
+                        or catalog.feature_dim != target.feature_dim:
+                    raise ValueError(
+                        "Re-ID 模型回滚前必须先激活同版本、同维数 Catalog")
+
+            previous_id = current.id
+            current.status = "retired"
+            target.status = "production"
+            pointer.model_version_id = target.id
+            db.add(ModelPromotionEvent(
+                model_version_id=target.id,
+                event_type="rollback_to_production",
+                actor_user_id=reviewer_user_id,
+                catalog_id=catalog_id,
+                payload={
+                    "previous_model_version_id": str(previous_id),
+                    "rollback": True,
+                },
+            ))
+
     def _dataset_samples(
         self,
         dataset_version_id: uuid.UUID,
