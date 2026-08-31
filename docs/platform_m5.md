@@ -10,7 +10,9 @@ M5 保持开发期“成员只管 push，服务器自动更新”的使用方式
 - 文件库：`/home/cancade/.local/share/whitewhale-dev/data`
 - `/ready` 已验证数据库、Migration 和文件库可用。
 
-当前 Manifest、r4 权重、r4 Gallery Embedding、Gallery Meta 与特征配置已登记到 `legacy_artifacts`。r4 与 Gallery 均保留 `provisional_unvalidated`，不会因导入而变成已标定 Production；跨批目录名也没有被猜测为同一身份。原始源文件不修改，平台文件库保存按 SHA-256 登记的只读副本。
+当前 Manifest、r4 权重、r4 Gallery Embedding、Gallery Meta 与特征配置已登记到 `legacy_artifacts`。r4 同时作为带有迁移例外事件的初始 Production Model，202 条 Gallery 作为 active Catalog；二者始终保留 `provisional_unvalidated`，不会被描述为已经完成阈值标定。43 个旧身份只按 `session + 原数字组` 隔离投影为 UUID，旧浮点化字符串仅作为 alias，不猜测跨批身份。原始源文件不修改，平台文件库保存按 SHA-256 登记的只读副本。
+
+一次性导入使用 `scripts/import_legacy_release.py`。它会校验 Meta/Embedding/Config 行数、特征维度、有限值、原图/Crop 路径和摘要，再原子创建旧训练血缘、Model、Observation 与 Catalog。旧训练成员无法复原时会显式记录 `legacy_training_membership_unavailable`，绝不把 Gallery 冒充训练集。
 
 ## 三分钟分支部署
 
