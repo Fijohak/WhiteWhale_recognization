@@ -60,6 +60,25 @@ export type IdentityChange = {
   created_by_user_id: string; created_at: string; applied_at: string | null;
 };
 
+export type DatasetSummary = {
+  dataset_version_id: string; name: string; protocol: string; status: string;
+  membership_digest: string; sample_count: number;
+  split_counts: Record<string, number>; created_at: string;
+};
+
+export type TrainingRunSummary = {
+  training_run_id: string; job_id: string; dataset_version_id: string;
+  task_type: string; model_family: string; state: string; job_state: string;
+  seed: number; created_at: string;
+};
+
+export type ModelSummary = {
+  model_version_id: string; model_family: string; version: string;
+  status: string; sha256: string; feature_dim: number | null;
+  preprocess_id: string; calibrated_thresholds: Record<string, number>;
+  completed_evaluations: number; created_at: string;
+};
+
 export type Individual = {
   individual_id: string; display_name: string; state: string;
   flags: string[]; observation_count: number;
@@ -247,6 +266,24 @@ export async function listIndividuals(): Promise<Individual[]> {
 
 export async function listRelationships(): Promise<Relationship[]> {
   return parse(await fetch("/api/relationships", { credentials: "include" }));
+}
+
+export async function listDatasets(): Promise<DatasetSummary[]> {
+  return parse(await fetch("/api/datasets", { credentials: "include" }));
+}
+
+export async function listTrainingRuns(): Promise<TrainingRunSummary[]> {
+  return parse(await fetch("/api/training-runs", { credentials: "include" }));
+}
+
+export async function listModels(): Promise<ModelSummary[]> {
+  return parse(await fetch("/api/models", { credentials: "include" }));
+}
+
+export async function requestModelPromotion(modelId: string): Promise<{ catalog_rebuild_job_id: string | null }> {
+  return parse(await fetch(`/api/models/${modelId}/request-promotion`, {
+    method: "POST", credentials: "include", headers: writeHeaders()
+  }));
 }
 
 export async function listCatalogs(): Promise<Catalog[]> {

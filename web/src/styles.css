@@ -38,6 +38,7 @@ nav button.active { background: #ffffff14; color: white; }
 .panel { padding: 28px; border: 1px solid #dce7e9; border-radius: 18px; background: white; box-shadow: 0 12px 35px #183f4a0a; }
 .panel-heading { display: flex; justify-content: space-between; align-items: start; }
 .panel h2 { margin: 0; font-family: Georgia, serif; font-size: 28px; color: #123f52; }
+.subheading { margin: 30px 0 -10px; color: #315664; font-size: 15px; }
 .pill { padding: 6px 10px; border-radius: 999px; background: #e7f4f3; color: #287266; font-size: 12px; font-weight: 700; }
 .form-grid { display: grid; grid-template-columns: repeat(3, minmax(160px, 1fr)); gap: 16px; margin: 28px 0 18px; }
 .dropzone { place-items: center; gap: 7px; padding: 42px 20px; border: 1.5px dashed #87acb5; border-radius: 14px; background: #f7fbfb; text-align: center; cursor: pointer; }

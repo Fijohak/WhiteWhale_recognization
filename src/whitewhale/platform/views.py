@@ -14,15 +14,22 @@ from .models import (
     CooccurrenceEvent,
     CooccurrenceMember,
     Crop,
+    DatasetMembership,
+    DatasetSplit,
+    DatasetVersion,
+    EvaluationRun,
     Image,
     IdentityChangeProposal,
     IndividualAlias,
     MatchCandidate,
+    ModelVersion,
     Observation,
     RelationshipEvidence,
     RelationshipHypothesis,
     ReviewerRoster,
     ReviewTask,
+    TrainingRun,
+    Job,
 )
 
 
@@ -199,6 +206,77 @@ class ArchiveReadService:
                 "applied_at": proposal.applied_at.isoformat()
                 if proposal.applied_at else None,
             }
+
+    def datasets(self) -> list[dict]:
+        with self._sessions() as db:
+            datasets = list(db.scalars(select(DatasetVersion).order_by(
+                DatasetVersion.created_at.desc())))
+            result = []
+            for dataset in datasets:
+                split_counts = {
+                    split: count for split, count in db.execute(
+                        select(DatasetSplit.split, func.count())
+                        .where(DatasetSplit.dataset_version_id == dataset.id)
+                        .group_by(DatasetSplit.split)
+                    )
+                }
+                result.append({
+                    "dataset_version_id": str(dataset.id),
+                    "name": dataset.name,
+                    "protocol": dataset.protocol,
+                    "status": dataset.status,
+                    "membership_digest": dataset.membership_digest,
+                    "sample_count": sum(split_counts.values()),
+                    "split_counts": split_counts,
+                    "created_at": dataset.created_at.isoformat(),
+                })
+            return result
+
+    def training_runs(self) -> list[dict]:
+        with self._sessions() as db:
+            rows = list(db.execute(
+                select(TrainingRun, Job)
+                .join(Job, Job.id == TrainingRun.job_id)
+                .order_by(TrainingRun.created_at.desc())
+            ))
+            return [{
+                "training_run_id": str(run.id),
+                "job_id": str(run.job_id),
+                "dataset_version_id": str(run.dataset_version_id),
+                "task_type": run.task_type,
+                "model_family": run.model_family,
+                "state": run.state,
+                "job_state": job.state.value,
+                "seed": run.seed,
+                "created_at": run.created_at.isoformat(),
+            } for run, job in rows]
+
+    def models(self) -> list[dict]:
+        with self._sessions() as db:
+            rows = list(db.execute(
+                select(ModelVersion, func.count(EvaluationRun.id))
+                .outerjoin(
+                    EvaluationRun,
+                    and_(
+                        EvaluationRun.model_version_id == ModelVersion.id,
+                        EvaluationRun.status == "completed",
+                    ),
+                )
+                .group_by(ModelVersion.id)
+                .order_by(ModelVersion.created_at.desc())
+            ))
+            return [{
+                "model_version_id": str(model.id),
+                "model_family": model.model_family,
+                "version": model.version,
+                "status": model.status,
+                "sha256": model.sha256,
+                "feature_dim": model.feature_dim,
+                "preprocess_id": model.preprocess_id,
+                "calibrated_thresholds": model.calibrated_thresholds,
+                "completed_evaluations": count,
+                "created_at": model.created_at.isoformat(),
+            } for model, count in rows]
 
     def individuals(self) -> list[dict]:
         with self._sessions() as db:

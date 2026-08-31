@@ -80,6 +80,22 @@ class TestWorkerRunner(unittest.TestCase):
         self.assertTrue(WorkerRunner(api, handlers={}).run_once())
         self.assertEqual(api.calls[-1][0], "fail")
 
+    def test_training_handler_can_upload_multiple_verified_outputs(self):
+        api = _FakeApi()
+        outputs = [ArtifactOutput(
+            artifact_type=artifact_type,
+            data=artifact_type.encode(),
+            schema_version=1,
+            pipeline_config_digest="a" * 64,
+        ) for artifact_type in ("model_weights", "training_report")]
+        runner = WorkerRunner(api, handlers={
+            "test_echo": lambda lease: outputs,
+        })
+        self.assertTrue(runner.run_once())
+        submitted = [call for call in api.calls if call[0] == "submit"]
+        self.assertEqual(len(submitted), 2)
+        self.assertEqual(api.calls[-1][0], "complete")
+
     def test_long_handler_renews_lease_until_artifact_upload_finishes(self):
         api = _FakeApi()
 

@@ -26,6 +26,7 @@ from .jobs import JobQueueService, LeaseService
 from .media import MediaService
 from .reviews import ReviewService
 from .storage import StorageLayout
+from .training import DatasetService, TrainingLifecycleService
 from .uploads import UploadService
 from .worker_auth import WorkerAuthService
 from .views import ArchiveReadService
@@ -83,6 +84,9 @@ class PlatformRuntime:
             archival_dispatch=ArchivalDispatchService(self.sessions, jobs),
             cooccurrence=CooccurrenceService(self.sessions),
             identity_changes=IdentityChangeService(self.sessions),
+            datasets=DatasetService(self.sessions),
+            training=TrainingLifecycleService(
+                self.sessions, jobs, self.storage),
         )
         self.app = create_app(
             readiness_probe=self.readiness,

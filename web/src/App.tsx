@@ -16,22 +16,29 @@ import {
   listBatches,
   listCatalogs,
   listIndividuals,
+  listDatasets,
+  listModels,
   listRelationships,
+  listTrainingRuns,
   login,
   logout,
   me,
   putPart,
+  requestModelPromotion,
   reviewInbox,
   submitVote,
   type BatchSummary,
   type Candidate,
   type Catalog,
   type Cooccurrence,
+  type DatasetSummary,
   type Individual,
   type IdentityChange,
   type ManifestFile,
+  type ModelSummary,
   type Relationship,
   type ReviewTask,
+  type TrainingRunSummary,
   type User
 } from "./api";
 
@@ -272,10 +279,35 @@ function RelationshipsPanel() {
   return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">RELATIONSHIP EVIDENCE</p><h2>关系证据集合</h2></div><span className="pill">{items.length} 条假设</span></div><div className="notice inline-notice"><strong>不是亲缘结论</strong><span>这里仅展示经审核的同框证据与待验证假设；系统不会自动写入“已确认亲缘”。</span></div>{error && <p className="error">{error}</p>}<div className="data-list">{items.map((item) => <article key={item.hypothesis_id}><div><strong>{item.individual_low_name} ↔ {item.individual_high_name}</strong><span>{typeName(item.relationship_type)} · {new Date(item.created_at).toLocaleString()}</span></div><div className="metrics"><b>{item.evidence_count} 条证据</b><span className="pill">{item.status}</span></div></article>)}</div></section>;
 }
 
+function TrainingPanel() {
+  const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
+  const [runs, setRuns] = useState<TrainingRunSummary[]>([]);
+  const [models, setModels] = useState<ModelSummary[]>([]);
+  const [message, setMessage] = useState("");
+  const refresh = () => Promise.all([
+    listDatasets().then(setDatasets),
+    listTrainingRuns().then(setRuns),
+    listModels().then(setModels)
+  ]).catch((reason) => setMessage(String(reason)));
+  useEffect(() => { void refresh(); }, []);
+  async function promote(modelId: string) {
+    try {
+      const result = await requestModelPromotion(modelId);
+      setMessage(result.catalog_rebuild_job_id
+        ? `上线门禁已通过，Catalog 重建任务：${result.catalog_rebuild_job_id}`
+        : "上线门禁已通过，Detector Production 指针已切换。");
+      await refresh();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "上线请求失败");
+    }
+  }
+  return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">TRAINING LIFECYCLE</p><h2>数据集、训练与模型</h2></div><span className="pill">服务器只调度 · GPU 在 Worker</span></div><div className="notice inline-notice"><strong>测试集冻结</strong><span>训练 Worker 只能下载 train / val / calibration；Production 必须完成固定 test、生产比较、阈值标定和兼容 Catalog 重建。</span></div>{message && <p className={message.includes("失败") || message.includes("尚未") ? "error" : "success"}>{message}</p>}<h3 className="subheading">Dataset Versions</h3><div className="data-list">{datasets.map((item) => <article key={item.dataset_version_id}><div><strong>{item.name}</strong><span>{item.protocol} · {item.membership_digest.slice(0, 12)}…</span></div><div className="metrics"><b>{item.sample_count} 样本</b>{Object.entries(item.split_counts).map(([split, count]) => <small key={split}>{split}: {count}</small>)}<span className="pill">{item.status}</span></div></article>)}</div><h3 className="subheading">Training Runs</h3><div className="data-list">{runs.map((item) => <article key={item.training_run_id}><div><strong>{item.model_family} · {item.task_type}</strong><span>seed {item.seed} · {new Date(item.created_at).toLocaleString()}</span></div><div className="metrics"><span className="pill">{item.job_state}</span></div></article>)}</div><h3 className="subheading">Model Versions</h3><div className="data-list">{models.map((item) => <article key={item.model_version_id}><div><strong>{item.version}</strong><span>{item.model_family} · {item.feature_dim ?? "-"} 维 · {item.completed_evaluations} 次固定评估</span></div><div className="metrics"><span className="pill">{item.status}</span>{item.status === "candidate" && <button onClick={() => promote(item.model_version_id)}>请求上线门禁</button>}</div></article>)}</div></section>;
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState<"upload" | "batches" | "reviews" | "individuals" | "relationships" | "catalogs">("upload");
+  const [page, setPage] = useState<"upload" | "batches" | "reviews" | "individuals" | "relationships" | "training" | "catalogs">("upload");
 
   useEffect(() => {
     me().then(setUser).catch(() => setUser(null)).finally(() => setLoading(false));
@@ -287,17 +319,18 @@ export default function App() {
   return <div className="app-shell">
     <aside>
       <div className="brand"><div className="mark">WW</div><div><strong>WhiteWhale</strong><span>Control Plane</span></div></div>
-      <nav>{[["upload", "批次上传"], ["batches", "批次进度"], ["reviews", "审核中心"], ["individuals", "个体目录"], ["relationships", "关系证据"], ["catalogs", "Catalog"]].map(([key, label]) => <button key={key} className={page === key ? "active" : ""} onClick={() => setPage(key as typeof page)}>{label}</button>)}</nav>
+      <nav>{[["upload", "批次上传"], ["batches", "批次进度"], ["reviews", "审核中心"], ["individuals", "个体目录"], ["relationships", "关系证据"], ["training", "训练与模型"], ["catalogs", "Catalog"]].map(([key, label]) => <button key={key} className={page === key ? "active" : ""} onClick={() => setPage(key as typeof page)}>{label}</button>)}</nav>
       <div className="account"><span>{user.username}</span><small>{user.roles.join(" · ")}</small><button className="quiet" onClick={() => logout().finally(() => setUser(null))}>退出</button></div>
     </aside>
     <main className="workspace">
-      <header><div><p className="eyebrow">M2 · ARCHIVAL LOOP</p><h1>海豚归档控制台</h1></div><div className="status-dot">控制面在线</div></header>
+      <header><div><p className="eyebrow">M4 · MODEL LIFECYCLE</p><h1>海豚归档控制台</h1></div><div className="status-dot">控制面在线</div></header>
       <div className="notice"><strong>候选不等于正式身份</strong><span>上传完成后，模型只生成候选结果；任何跨时间个体合并均需独立人工审核。</span></div>
       {page === "upload" && <UploadPanel />}
       {page === "batches" && <BatchesPanel />}
       {page === "reviews" && <ReviewPanel />}
       {page === "individuals" && <IndividualsPanel />}
       {page === "relationships" && <RelationshipsPanel />}
+      {page === "training" && <TrainingPanel />}
       {page === "catalogs" && <CatalogPanel />}
     </main>
   </div>;

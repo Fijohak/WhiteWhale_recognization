@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from .models import Crop, Image, Job
+from .models import Artifact, Crop, Image, Job
 from .storage import StorageLayout
 
 
@@ -58,7 +58,62 @@ class MediaService:
         with self._sessions() as db:
             job = db.get(Job, job_id)
             image = db.get(Image, image_id)
-            if job is None or image is None or job.batch_id is None \
-                    or image.batch_id != job.batch_id:
+            if job is None or image is None:
+                raise MediaNotFound("图片不属于该租约任务输入")
+            allowed = {
+                uuid.UUID(item["image_id"])
+                for item in job.input_manifest.get("samples", [])
+                if item.get("image_id")
+            }
+            if not ((job.batch_id is not None and image.batch_id == job.batch_id)
+                    or image_id in allowed):
                 raise MediaNotFound("图片不属于该租约任务的 Batch")
         return self.image(image_id)
+
+    def leased_crop(self, job_id: uuid.UUID, crop_id: uuid.UUID) -> MediaFile:
+        with self._sessions() as db:
+            job = db.get(Job, job_id)
+            if job is None:
+                raise MediaNotFound("租约任务不存在")
+            manifest = job.input_manifest
+            allowed = {
+                uuid.UUID(item["crop_id"])
+                for key in ("samples", "observations")
+                for item in manifest.get(key, [])
+                if item.get("crop_id")
+            }
+            if crop_id not in allowed:
+                raise MediaNotFound("Crop 不属于该租约任务输入清单")
+            if job.task_type in {"detector_training", "reid_training"}:
+                split_by_crop = {
+                    uuid.UUID(item["crop_id"]): item.get("split")
+                    for item in manifest.get("samples", [])
+                    if item.get("crop_id")
+                }
+                if split_by_crop.get(crop_id) == "test":
+                    raise MediaNotFound("训练 Worker 不能下载冻结 test Crop")
+        return self.crop(crop_id)
+
+    def leased_artifact(
+        self, job_id: uuid.UUID, artifact_id: uuid.UUID,
+    ) -> MediaFile:
+        with self._sessions() as db:
+            job = db.get(Job, job_id)
+            artifact = db.get(Artifact, artifact_id)
+            if job is None or artifact is None:
+                raise MediaNotFound("Artifact 不存在")
+            manifest = job.input_manifest
+            allowed = {
+                value for value in (
+                    manifest.get("weight_artifact_id"),
+                    (manifest.get("resume") or {}).get("artifact_id"),
+                    (manifest.get("production_model") or {}).get(
+                        "weight_artifact_id"),
+                ) if value
+            }
+            if str(artifact_id) not in allowed:
+                raise MediaNotFound("Artifact 不属于该租约任务输入清单")
+            path = self._storage.resolve("artifacts", artifact.relative_path)
+        if not path.is_file():
+            raise MediaNotFound("Artifact 文件不存在")
+        return MediaFile(path, "application/octet-stream", path.name)

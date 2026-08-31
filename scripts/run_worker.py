@@ -21,6 +21,13 @@ from whitewhale.worker.archival import (  # noqa: E402
     ArchivalWorkerConfig,
     make_batch_archival_handler,
 )
+from whitewhale.worker.training import (  # noqa: E402
+    WorkerTrainingConfig,
+    make_training_handler,
+)
+from whitewhale.worker.model_lifecycle import (  # noqa: E402
+    make_model_lifecycle_handler,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -48,6 +55,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--heartbeat-seconds", type=float, default=60.0)
     run.add_argument("--detector-weights", type=Path)
     run.add_argument("--reid-checkpoint", type=Path)
+    run.add_argument("--detector-training-base", type=Path)
     run.add_argument("--device", default="auto")
     run.add_argument("--detector-conf", type=float, default=0.25)
     run.add_argument("--detector-imgsz", type=int, default=1024)
@@ -87,7 +95,18 @@ def main() -> None:
         args.api, credentials["device_token"], ca_file=args.ca_file)
     handlers = {
         "test_echo": test_echo_handler,
+        "reid_training": make_training_handler(api),
+        "fixed_evaluation": make_model_lifecycle_handler(
+            api, device=args.device, batch_size=args.batch_size),
+        "catalog_rebuild": make_model_lifecycle_handler(
+            api, device=args.device, batch_size=args.batch_size),
     }
+    if args.detector_training_base:
+        handlers["detector_training"] = make_training_handler(
+            api, worker_config=WorkerTrainingConfig(
+                detector_base_weights=args.detector_training_base,
+                device=args.device,
+            ))
     if bool(args.detector_weights) != bool(args.reid_checkpoint):
         raise SystemExit(
             "归档 Worker 必须同时提供 --detector-weights 和 --reid-checkpoint")

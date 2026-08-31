@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     Enum as SqlEnum,
     ForeignKey,
+    ForeignKeyConstraint,
     Float,
     Integer,
     JSON,
@@ -799,6 +800,260 @@ class RelationshipEvent(Base):
     payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class DatasetVersion(TimestampMixin, Base):
+    __tablename__ = "dataset_versions"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    protocol: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), default="frozen", nullable=False)
+    catalog_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("catalog_versions.id", ondelete="RESTRICT"))
+    membership_digest: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False)
+    rights_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    frozen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "protocol IN ('known_identity_update', 'open_set_unknown')",
+            name="valid_protocol",
+        ),
+        CheckConstraint(
+            "status IN ('frozen', 'retired')", name="valid_status"),
+    )
+
+
+class DatasetMembership(Base):
+    __tablename__ = "dataset_memberships"
+    dataset_version_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("dataset_versions.id", ondelete="CASCADE"),
+        primary_key=True)
+    observation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("observations.id", ondelete="RESTRICT"), primary_key=True)
+    image_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("images.id", ondelete="RESTRICT"), nullable=False)
+    crop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("crops.id", ondelete="RESTRICT"), nullable=False)
+    individual_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("confirmed_individuals.id", ondelete="RESTRICT"),
+        nullable=False)
+    label_source: Mapped[str] = mapped_column(String(64), nullable=False)
+    sequence_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    encounter_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    duplicate_group: Mapped[str] = mapped_column(String(256), nullable=False)
+    data_license: Mapped[str] = mapped_column(String(128), nullable=False)
+    __table_args__ = (
+        UniqueConstraint(
+            "dataset_version_id", "crop_id",
+            name="dataset_memberships_dataset_crop",
+        ),
+        CheckConstraint(
+            "label_source IN ('provider_confirmed', 'project_verified', "
+            "'high_trust_pseudo_label')",
+            name="valid_label_source",
+        ),
+    )
+
+
+class DatasetSplit(Base):
+    __tablename__ = "dataset_splits"
+    dataset_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, primary_key=True)
+    observation_id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    split: Mapped[str] = mapped_column(String(32), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["dataset_version_id", "observation_id"],
+            ["dataset_memberships.dataset_version_id",
+             "dataset_memberships.observation_id"],
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "split IN ('train', 'val', 'calibration', 'test')",
+            name="valid_split",
+        ),
+    )
+
+
+class TrainingRun(TimestampMixin, Base):
+    __tablename__ = "training_runs"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("jobs.id", ondelete="RESTRICT"), unique=True,
+        nullable=False)
+    dataset_version_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("dataset_versions.id", ondelete="RESTRICT"), nullable=False)
+    task_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    model_family: Mapped[str] = mapped_column(String(128), nullable=False)
+    base_model_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey(
+            "model_versions.id", ondelete="RESTRICT", use_alter=True,
+            name="fk_training_runs_base_model_version_id_model_versions",
+        ))
+    config: Mapped[dict] = mapped_column(JSON, nullable=False)
+    seed: Mapped[int] = mapped_column(Integer, nullable=False)
+    required_vram_mb: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_runtime_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    checkpoint_interval_steps: Mapped[int] = mapped_column(
+        Integer, nullable=False)
+    resume_checkpoint_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    state: Mapped[str] = mapped_column(
+        String(32), default="queued", nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "task_type IN ('detector_training', 'reid_training')",
+            name="valid_task_type",
+        ),
+        CheckConstraint(
+            "state IN ('queued', 'running', 'completed', 'failed')",
+            name="valid_state",
+        ),
+        CheckConstraint(
+            "required_vram_mb > 0 AND max_runtime_seconds > 0 "
+            "AND checkpoint_interval_steps > 0",
+            name="positive_limits",
+        ),
+    )
+
+
+class TrainingCheckpoint(TimestampMixin, Base):
+    __tablename__ = "training_checkpoints"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    training_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("training_runs.id", ondelete="CASCADE"), nullable=False)
+    artifact_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("artifacts.id", ondelete="RESTRICT"), unique=True,
+        nullable=False)
+    stage: Mapped[int] = mapped_column(Integer, nullable=False)
+    epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    step: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict,
+                                                nullable=False)
+    __table_args__ = (
+        UniqueConstraint(
+            "training_run_id", "stage", "epoch", "step",
+            name="training_checkpoints_run_stage_epoch_step",
+        ),
+        CheckConstraint(
+            "stage >= 0 AND epoch >= 0 AND step >= 0",
+            name="nonnegative_step"),
+    )
+
+
+class ModelVersion(TimestampMixin, Base):
+    __tablename__ = "model_versions"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    training_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("training_runs.id", ondelete="RESTRICT"), unique=True,
+        nullable=False)
+    weight_artifact_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("artifacts.id", ondelete="RESTRICT"), unique=True,
+        nullable=False)
+    model_family: Mapped[str] = mapped_column(String(128), nullable=False)
+    version: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), default="candidate", nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    weight_path: Mapped[str] = mapped_column(Text, nullable=False)
+    feature_dim: Mapped[int | None] = mapped_column(Integer)
+    preprocess_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    checkpoint_source: Mapped[str] = mapped_column(String(256), nullable=False)
+    license: Mapped[str] = mapped_column(String(256), nullable=False)
+    compatible_detector_version: Mapped[str | None] = mapped_column(
+        String(128))
+    compatible_crop_config: Mapped[str] = mapped_column(String(128),
+                                                        nullable=False)
+    compatible_index_schema: Mapped[int] = mapped_column(Integer,
+                                                          nullable=False)
+    calibrated_thresholds: Mapped[dict] = mapped_column(
+        JSON, default=dict, nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('candidate', 'promotion_pending', 'production', "
+            "'retired', 'rejected')",
+            name="valid_status",
+        ),
+        CheckConstraint(
+            "feature_dim IS NULL OR feature_dim > 0", name="positive_dim"),
+        CheckConstraint(
+            "compatible_index_schema > 0", name="positive_index_schema"),
+    )
+
+
+class EvaluationRun(TimestampMixin, Base):
+    __tablename__ = "evaluation_runs"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("jobs.id", ondelete="RESTRICT"), unique=True,
+        nullable=False)
+    model_version_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("model_versions.id", ondelete="RESTRICT"), nullable=False)
+    dataset_version_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("dataset_versions.id", ondelete="RESTRICT"), nullable=False)
+    protocol: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), default="queued", nullable=False)
+    report_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("artifacts.id", ondelete="RESTRICT"))
+    comparison: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    calibrated_thresholds: Mapped[dict] = mapped_column(
+        JSON, default=dict, nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'running', 'completed', 'failed')",
+            name="valid_status",
+        ),
+    )
+
+
+class EvaluationResult(TimestampMixin, Base):
+    __tablename__ = "evaluation_results"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    evaluation_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("evaluation_runs.id", ondelete="CASCADE"), nullable=False)
+    metric_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    split: Mapped[str] = mapped_column(String(32), nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    __table_args__ = (
+        UniqueConstraint(
+            "evaluation_run_id", "metric_name", "split",
+            name="evaluation_results_run_metric_split",
+        ),
+    )
+
+
+class ModelPromotionEvent(Base):
+    __tablename__ = "model_promotion_events"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    model_version_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("model_versions.id", ondelete="RESTRICT"), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    catalog_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("catalog_versions.id", ondelete="RESTRICT"))
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ProductionModelPointer(Base):
+    __tablename__ = "production_model_pointer"
+    model_family: Mapped[str] = mapped_column(String(128), primary_key=True)
+    model_version_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("model_versions.id", ondelete="RESTRICT"),
+        unique=True, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+        onupdate=func.now(), nullable=False)
 
 
 class CatalogVersion(TimestampMixin, Base):

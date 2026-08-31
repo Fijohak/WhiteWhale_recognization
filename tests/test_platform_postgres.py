@@ -175,6 +175,10 @@ class TestPostgresLeaseConcurrency(unittest.TestCase):
             "cooccurrence_events", "cooccurrence_members",
             "relationship_hypotheses", "relationship_evidence",
             "relationship_events",
+            "dataset_versions", "dataset_memberships", "dataset_splits",
+            "training_runs", "training_checkpoints",
+            "evaluation_runs", "evaluation_results", "model_versions",
+            "model_promotion_events", "production_model_pointer",
         }.issubset(tables))
         command.check(config)
 

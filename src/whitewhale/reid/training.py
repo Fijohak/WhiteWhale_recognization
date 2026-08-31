@@ -134,6 +134,29 @@ def split_by_individual(df: pd.DataFrame, val_n: int, seed: int):
     return train, val
 
 
+def split_frozen_dataset(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """严格采用服务器冻结的 train/val；calibration 不参与梯度或择优。"""
+    if "frozen_split" not in df.columns:
+        raise ValueError("平台训练清单缺少 frozen_split")
+    values = set(df["frozen_split"].astype(str))
+    if not values.issubset({"train", "val", "calibration"}):
+        raise ValueError("训练清单包含 test 或未知 frozen_split")
+    train = df[df["frozen_split"] == "train"].copy()
+    val = df[df["frozen_split"] == "val"].copy()
+    if train.empty or val.empty:
+        raise ValueError("冻结 Dataset 的 train/val 均不可为空")
+    for field in ("series_unit", "encounter_key", "duplicate_group"):
+        if field not in df.columns:
+            raise ValueError(f"平台训练清单缺少 {field}")
+        train_groups = set(train[field].astype(str)) - {""}
+        val_groups = set(val[field].astype(str)) - {""}
+        if train_groups & val_groups:
+            raise ValueError(f"冻结 Dataset 的 {field} 跨 train/val")
+    return train, val
+
+
 class DolphinDataset(Dataset):
     """加载原图（80 分以上为背鳍特写，直接用原图 resize）。"""
 
@@ -609,8 +632,8 @@ def _save_history(history: list[dict], path: Path) -> None:
 
 def _save_epoch_progress(model: ReIDModel, optimizer, history: list[dict],
                          out_dir: Path, *, stage: int, epoch: int,
-                         val_r1: float) -> None:
-    """保存可诊断的最近训练状态；当前仅用于中断取证，不提供自动续训。"""
+                         val_r1: float, checkpoint_callback=None) -> None:
+    """保存可验证恢复的最近训练状态。"""
     _save_history(history, out_dir / "history.csv")
     _save_checkpoint({
         "state": model.state_dict(),
@@ -619,7 +642,12 @@ def _save_epoch_progress(model: ReIDModel, optimizer, history: list[dict],
         "epoch": epoch,
         "val_r1": val_r1,
         "history_rows": len(history),
+        "history": history,
     }, out_dir / "last.pt")
+    if checkpoint_callback is not None:
+        checkpoint_callback(
+            out_dir / "last.pt", stage=stage, epoch=epoch,
+            step=len(history))
 
 
 def _validated_init_state(checkpoint: object,
@@ -660,11 +688,16 @@ def run_training(args, df: pd.DataFrame, out_dir: Path):
         raw_test_sessions = [raw_test_sessions]
     test_sessions = list(dict.fromkeys(
         str(session).strip() for session in raw_test_sessions))
-    split_candidates, test_df = _isolate_test_sessions(df, test_sessions)
-    train_df, val_df = split_by_individual(
-        split_candidates, args.val_n, args.seed)
-    purged_shared_series_rows = int(
-        train_df.attrs.get("purged_shared_series_rows", 0))
+    if "frozen_split" in df.columns:
+        train_df, val_df = split_frozen_dataset(df)
+        test_df = df.iloc[0:0].copy()
+        purged_shared_series_rows = 0
+    else:
+        split_candidates, test_df = _isolate_test_sessions(df, test_sessions)
+        train_df, val_df = split_by_individual(
+            split_candidates, args.val_n, args.seed)
+        purged_shared_series_rows = int(
+            train_df.attrs.get("purged_shared_series_rows", 0))
     # 重新映射训练个体编号为 0..n-1（load_confirmed 的编号是全局的，
     # 留出验证个体后会出现空洞，导致 one_hot / CUDA 索引越界）
     train_df = train_df.copy()
@@ -710,6 +743,20 @@ def run_training(args, df: pd.DataFrame, out_dir: Path):
     model = ReIDModel(make_backbone(), n_classes=n_classes).to(DEVICE)
     init_checkpoint_loaded = False
     init_checkpoint_matched_backbone_keys = 0
+    loaded_checkpoint = None
+    if getattr(args, "init_ckpt", None):
+        if not Path(args.init_ckpt).is_file():
+            raise FileNotFoundError(f"初始化权重不存在：{args.init_ckpt}")
+        ckpt = torch.load(args.init_ckpt, map_location=DEVICE)
+        # head 层形状随训练个体数变化；只继承形状兼容且通过校验的权重。
+        cur_state = model.state_dict()
+        state, init_checkpoint_matched_backbone_keys = _validated_init_state(
+            ckpt, cur_state)
+        missing, unexpected = model.load_state_dict(state, strict=False)
+        init_checkpoint_loaded = True
+        loaded_checkpoint = ckpt
+        print(f"[train] 初始化自 {args.init_ckpt}（missing {len(missing)} 项；"
+              f"unexpected {len(unexpected)} 项）")
     if hard_negative:
         tr_ds = DolphinDatasetHn(train_df, make_transforms(True))
         tr_ds.preload()  # 原图大，预缩放到内存缓存，避免 CPU 解码成为瓶颈
@@ -717,19 +764,6 @@ def run_training(args, df: pd.DataFrame, out_dir: Path):
             tr_ds.labels, tr_ds.sessions, tr_ds.series, args.batch,
             args.batches_per_epoch, args.seed)
         tr_loader = DataLoader(tr_ds, batch_sampler=sampler)
-        if getattr(args, "init_ckpt", None):
-            if not Path(args.init_ckpt).is_file():
-                raise FileNotFoundError(f"初始化权重不存在：{args.init_ckpt}")
-            ckpt = torch.load(args.init_ckpt, map_location=DEVICE)
-            # head 层形状随训练个体数变化（768×n_classes）：形状不匹配的键
-            # 跳过（head 阶段一会重新训练），backbone 知识照常继承
-            cur_state = model.state_dict()
-            state, init_checkpoint_matched_backbone_keys = _validated_init_state(
-                ckpt, cur_state)
-            missing, unexpected = model.load_state_dict(state, strict=False)
-            init_checkpoint_loaded = True
-            print(f"[train] 初始化自 {args.init_ckpt}（missing {len(missing)} 项 = head 层；"
-                  f"unexpected {len(unexpected)} 项）")
     else:
         tr_loader = DataLoader(DolphinDatasetSession(train_df, make_transforms(True)),
                                batch_size=args.batch, shuffle=True,
@@ -757,9 +791,23 @@ def run_training(args, df: pd.DataFrame, out_dir: Path):
         baseline_test_result = eval_retrieval(
             model, test_loader, test_series, test_session_ids,
             return_details=True)
-    history = []
+    resume_stage = 0
+    resume_epoch = 0
+    history: list[dict] = []
+    if loaded_checkpoint is not None:
+        if not isinstance(loaded_checkpoint.get("optimizer"), dict) \
+                or not isinstance(loaded_checkpoint.get("history"), list):
+            raise ValueError("恢复点缺少 optimizer/history，不能作为断点续训")
+        resume_stage = int(loaded_checkpoint.get("stage", -1))
+        resume_epoch = int(loaded_checkpoint.get("epoch", -1))
+        if resume_stage not in {1, 2} or resume_epoch < 0:
+            raise ValueError("恢复点 stage/epoch 无效")
+        history = list(loaded_checkpoint["history"])
     triplet_observability = {1: [], 2: []}
-    best_r1, best_stage, best_epoch = pretrained_r1, 0, 0
+    best_r1 = (float(loaded_checkpoint.get("val_r1", pretrained_r1))
+               if loaded_checkpoint is not None else pretrained_r1)
+    best_stage = resume_stage
+    best_epoch = resume_epoch
     # best.pt 从训练前基线起步。阶段一只训练分类头，不参与检索 backbone
     # 的择优；阶段二只有严格优于基线/当前最佳时才可替换它。
     _save_checkpoint({
@@ -776,8 +824,14 @@ def run_training(args, df: pd.DataFrame, out_dir: Path):
         p.requires_grad = False
     opt = torch.optim.AdamW([p for p in model.head.parameters() if p.requires_grad],
                             lr=args.lr_head, weight_decay=5e-4)
+    stage1_start = 1
+    if resume_stage == 1:
+        opt.load_state_dict(loaded_checkpoint["optimizer"])
+        stage1_start = resume_epoch + 1
+    elif resume_stage == 2:
+        stage1_start = args.epochs_stage1 + 1
     print(f"[s1] 冻结 backbone 训 head（{args.epochs_stage1} epochs, lr={args.lr_head}）")
-    for ep in range(1, args.epochs_stage1 + 1):
+    for ep in range(stage1_start, args.epochs_stage1 + 1):
         if hard_negative:
             ce, hn, hn_stats = train_one_epoch_hn(
                 model, tr_loader, opt, 0.0, class_sessions,
@@ -811,7 +865,8 @@ def run_training(args, df: pd.DataFrame, out_dir: Path):
                 {"stage": 1, "epoch": ep, "lambda_hn": 0.0, **hn_stats})
         history.append(epoch_record)
         _save_epoch_progress(
-            model, opt, history, out_dir, stage=1, epoch=ep, val_r1=r1)
+            model, opt, history, out_dir, stage=1, epoch=ep, val_r1=r1,
+            checkpoint_callback=getattr(args, "checkpoint_callback", None))
         if ep == args.epochs_stage1:
             stage1_final_r1 = r1
             payload = {"state": model.state_dict(), "epoch": ep,
@@ -832,10 +887,14 @@ def run_training(args, df: pd.DataFrame, out_dir: Path):
         {"params": model.backbone.parameters(), "lr": args.lr_backbone},
         {"params": model.head.parameters(), "lr": args.lr_head},
     ], weight_decay=5e-4)
+    stage2_start = 1
+    if resume_stage == 2:
+        opt.load_state_dict(loaded_checkpoint["optimizer"])
+        stage2_start = resume_epoch + 1
     lambda_hn = getattr(args, "lambda_hn", 0.2) if hard_negative else 0.0
     print(f"[s2] 解冻微调（{args.epochs_stage2} epochs, lr={args.lr_backbone}），"
           f"loss = CE + {lambda_hn} × within-session batch-hard triplet")
-    for ep in range(1, args.epochs_stage2 + 1):
+    for ep in range(stage2_start, args.epochs_stage2 + 1):
         if hard_negative:
             ce, hn, hn_stats = train_one_epoch_hn(
                 model, tr_loader, opt, lambda_hn, class_sessions,
@@ -867,7 +926,8 @@ def run_training(args, df: pd.DataFrame, out_dir: Path):
                 {"stage": 2, "epoch": ep, "lambda_hn": lambda_hn, **hn_stats})
         history.append(epoch_record)
         _save_epoch_progress(
-            model, opt, history, out_dir, stage=2, epoch=ep, val_r1=r1)
+            model, opt, history, out_dir, stage=2, epoch=ep, val_r1=r1,
+            checkpoint_callback=getattr(args, "checkpoint_callback", None))
         if r1 > best_r1:
             best_r1, best_stage, best_epoch = r1, 2, ep
             _save_checkpoint(

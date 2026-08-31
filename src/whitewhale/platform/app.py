@@ -42,6 +42,12 @@ from .jobs import InvalidLease, JobConflict, JobQueueService, LeaseService
 from .media import MediaNotFound, MediaService
 from .review_policy import ReviewVote
 from .reviews import ReviewService
+from .training import (
+    DatasetSampleSpec,
+    DatasetService,
+    ModelManifest,
+    TrainingLifecycleService,
+)
 from .uploads import (
     UploadConflict,
     UploadFileSpec,
@@ -90,6 +96,8 @@ class PlatformServices:
     archival_dispatch: ArchivalDispatchService | None = None
     cooccurrence: CooccurrenceService | None = None
     identity_changes: IdentityChangeService | None = None
+    datasets: DatasetService | None = None
+    training: TrainingLifecycleService | None = None
 
 
 class _StrictModel(BaseModel):
@@ -217,6 +225,84 @@ class IdentitySplitRequest(_StrictModel):
 class ObservationWithdrawalRequest(_StrictModel):
     observation_ids: list[uuid.UUID] = Field(min_length=1)
     reviewer_ids: list[uuid.UUID]
+
+
+class DatasetSampleRequest(_StrictModel):
+    observation_id: uuid.UUID
+    label_source: str
+    split: str
+    sequence_key: str
+    encounter_key: str
+    duplicate_group: str
+    data_license: str
+
+
+class DatasetFreezeRequest(_StrictModel):
+    name: str = Field(min_length=1, max_length=256)
+    protocol: str
+    samples: list[DatasetSampleRequest] = Field(min_length=1)
+    rights_snapshot: dict
+    catalog_id: uuid.UUID | None = None
+
+
+class TrainingDispatchRequest(_StrictModel):
+    task_type: str
+    model_family: str = Field(min_length=1, max_length=128)
+    base_model_id: uuid.UUID | None = None
+    config: dict
+    seed: int
+    required_vram_mb: int = Field(gt=0)
+    max_runtime_seconds: int = Field(gt=0)
+    checkpoint_interval_steps: int = Field(gt=0)
+    resume_checkpoint_id: uuid.UUID | None = None
+
+
+class ModelManifestRequest(_StrictModel):
+    artifact_id: uuid.UUID
+    model_family: str
+    version: str
+    sha256: str
+    feature_dim: int | None = Field(default=None, gt=0)
+    preprocess_id: str
+    checkpoint_source: str
+    license: str
+    compatible_detector_version: str | None = None
+    compatible_crop_config: str
+    compatible_index_schema: int = Field(gt=0)
+
+
+class EvaluationDispatchRequest(_StrictModel):
+    dataset_version_id: uuid.UUID
+    required_vram_mb: int = Field(gt=0)
+
+
+class EvaluationRecordRequest(_StrictModel):
+    report_artifact_id: uuid.UUID
+    metrics: dict[str, float]
+    production_comparison: dict
+    calibrated_thresholds: dict[str, float]
+
+
+class CheckpointRegisterRequest(_StrictModel):
+    artifact_id: uuid.UUID
+    stage: int = Field(ge=0)
+    epoch: int = Field(ge=0)
+    step: int = Field(ge=0)
+    metadata: dict = Field(default_factory=dict)
+
+
+class PromotionCompleteRequest(_StrictModel):
+    catalog_id: uuid.UUID
+
+
+class CatalogRebuildIngestRequest(_StrictModel):
+    artifact_id: uuid.UUID
+
+
+class WorkerCheckpointRegisterRequest(_StrictModel):
+    stage: int = Field(ge=0)
+    epoch: int = Field(ge=0)
+    step: int = Field(ge=0)
 
 
 def _default_readiness_probe() -> Readiness:
@@ -556,6 +642,21 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
             except ValueError as exc:
                 raise HTTPException(
                     status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
+        @app.get("/api/datasets")
+        def list_datasets(request: Request):
+            current_principal(request)
+            return services.views.datasets()
+
+        @app.get("/api/training-runs")
+        def list_training_runs(request: Request):
+            current_principal(request)
+            return services.views.training_runs()
+
+        @app.get("/api/models")
+        def list_models(request: Request):
+            current_principal(request)
+            return services.views.models()
 
         @app.get("/api/individuals")
         def list_individuals(request: Request):
@@ -933,6 +1034,208 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
                     str(value) for value in result.affected_observation_ids],
             }
 
+    if services.datasets is not None:
+        @app.post(
+            "/api/datasets/freeze",
+            status_code=status.HTTP_201_CREATED,
+        )
+        def freeze_dataset(
+            body: DatasetFreezeRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_upload_role(principal)
+            try:
+                dataset_id = services.datasets.freeze(
+                    name=body.name,
+                    protocol=body.protocol,
+                    samples=[DatasetSampleSpec(
+                        observation_id=item.observation_id,
+                        label_source=item.label_source,
+                        split=item.split,
+                        sequence_key=item.sequence_key,
+                        encounter_key=item.encounter_key,
+                        duplicate_group=item.duplicate_group,
+                        data_license=item.data_license,
+                    ) for item in body.samples],
+                    created_by_user_id=principal.user_id,
+                    rights_snapshot=body.rights_snapshot,
+                    catalog_id=body.catalog_id,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"dataset_version_id": str(dataset_id)}
+
+    if services.training is not None:
+        @app.post(
+            "/api/datasets/{dataset_id}/training-runs",
+            status_code=status.HTTP_201_CREATED,
+        )
+        def dispatch_training(
+            dataset_id: uuid.UUID,
+            body: TrainingDispatchRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_upload_role(principal)
+            try:
+                run_id, job_id = services.training.dispatch_training(
+                    dataset_id,
+                    task_type=body.task_type,
+                    model_family=body.model_family,
+                    base_model_id=body.base_model_id,
+                    config=body.config,
+                    seed=body.seed,
+                    required_vram_mb=body.required_vram_mb,
+                    max_runtime_seconds=body.max_runtime_seconds,
+                    checkpoint_interval_steps=body.checkpoint_interval_steps,
+                    resume_checkpoint_id=body.resume_checkpoint_id,
+                )
+            except (ValueError, JobConflict) as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"training_run_id": str(run_id), "job_id": str(job_id)}
+
+        @app.post(
+            "/api/training-runs/{run_id}/checkpoints",
+            status_code=status.HTTP_201_CREATED,
+        )
+        def register_training_checkpoint(
+            run_id: uuid.UUID,
+            body: CheckpointRegisterRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_upload_role(principal)
+            try:
+                checkpoint_id = services.training.register_checkpoint(
+                    run_id, body.artifact_id,
+                    stage=body.stage,
+                    epoch=body.epoch, step=body.step,
+                    metadata=body.metadata,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"checkpoint_id": str(checkpoint_id)}
+
+        @app.post(
+            "/api/training-runs/{run_id}/model",
+            status_code=status.HTTP_201_CREATED,
+        )
+        def register_model(
+            run_id: uuid.UUID,
+            body: ModelManifestRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_upload_role(principal)
+            try:
+                model_id = services.training.register_model(
+                    run_id,
+                    body.artifact_id,
+                    ModelManifest(
+                        model_family=body.model_family,
+                        version=body.version,
+                        sha256=body.sha256,
+                        feature_dim=body.feature_dim,
+                        preprocess_id=body.preprocess_id,
+                        checkpoint_source=body.checkpoint_source,
+                        license=body.license,
+                        compatible_detector_version=
+                        body.compatible_detector_version,
+                        compatible_crop_config=body.compatible_crop_config,
+                        compatible_index_schema=body.compatible_index_schema,
+                    ),
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"model_version_id": str(model_id)}
+
+        @app.post(
+            "/api/models/{model_id}/evaluations",
+            status_code=status.HTTP_201_CREATED,
+        )
+        def dispatch_evaluation(
+            model_id: uuid.UUID,
+            body: EvaluationDispatchRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_upload_role(principal)
+            try:
+                evaluation_id, job_id = services.training.dispatch_evaluation(
+                    model_id, body.dataset_version_id,
+                    required_vram_mb=body.required_vram_mb,
+                )
+            except (ValueError, JobConflict) as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"evaluation_run_id": str(evaluation_id),
+                    "job_id": str(job_id)}
+
+        @app.post("/api/evaluations/{evaluation_id}/record")
+        def record_evaluation(
+            evaluation_id: uuid.UUID,
+            body: EvaluationRecordRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_upload_role(principal)
+            try:
+                services.training.record_evaluation(
+                    evaluation_id,
+                    report_artifact_id=body.report_artifact_id,
+                    metrics=body.metrics,
+                    production_comparison=body.production_comparison,
+                    calibrated_thresholds=body.calibrated_thresholds,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"status": "completed"}
+
+        @app.post("/api/models/{model_id}/request-promotion")
+        def request_model_promotion(
+            model_id: uuid.UUID,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_reviewer(principal)
+            try:
+                job_id = services.training.request_promotion(
+                    model_id, principal.user_id)
+            except (ValueError, JobConflict) as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"catalog_rebuild_job_id": (
+                str(job_id) if job_id is not None else None)}
+
+        @app.post("/api/models/{model_id}/complete-promotion")
+        def complete_model_promotion(
+            model_id: uuid.UUID,
+            body: PromotionCompleteRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_reviewer(principal)
+            try:
+                services.training.complete_promotion(
+                    model_id, body.catalog_id, principal.user_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"status": "production"}
+
+        @app.post("/api/models/{model_id}/catalog-rebuild/ingest")
+        def ingest_model_catalog_rebuild(
+            model_id: uuid.UUID,
+            body: CatalogRebuildIngestRequest,
+            principal: Principal = Depends(protected_write),
+        ):
+            require_reviewer(principal)
+            try:
+                catalog_id = services.training.ingest_catalog_rebuild(
+                    model_id, body.artifact_id, principal.user_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            return {"status": "production", "catalog_id": str(catalog_id)}
+
     if all((services.worker_auth, services.jobs,
             services.leases, services.results)):
         _mount_worker_api(
@@ -1103,6 +1406,44 @@ def _mount_worker_api(
                     status.HTTP_404_NOT_FOUND, str(exc)) from exc
             return FileResponse(media.path, media_type=media.media_type)
 
+        @app.get("/api/tasks/{job_id}/inputs/crops/{crop_id}")
+        def task_input_crop(
+            job_id: uuid.UUID,
+            crop_id: uuid.UUID,
+            lease_token: str = Header(alias="X-Lease-Token"),
+            worker: WorkerPrincipal = Depends(current_worker),
+        ):
+            try:
+                leases.validate(
+                    job_id, lease_token, device_id=worker.device_id)
+                media = services.media.leased_crop(job_id, crop_id)
+            except InvalidLease as exc:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, str(exc)) from exc
+            except MediaNotFound as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, str(exc)) from exc
+            return FileResponse(media.path, media_type=media.media_type)
+
+        @app.get("/api/tasks/{job_id}/inputs/artifacts/{artifact_id}")
+        def task_input_artifact(
+            job_id: uuid.UUID,
+            artifact_id: uuid.UUID,
+            lease_token: str = Header(alias="X-Lease-Token"),
+            worker: WorkerPrincipal = Depends(current_worker),
+        ):
+            try:
+                leases.validate(
+                    job_id, lease_token, device_id=worker.device_id)
+                media = services.media.leased_artifact(job_id, artifact_id)
+            except InvalidLease as exc:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, str(exc)) from exc
+            except MediaNotFound as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, str(exc)) from exc
+            return FileResponse(media.path, media_type=media.media_type)
+
     @app.post(
         "/api/tasks/{job_id}/start",
         status_code=status.HTTP_204_NO_CONTENT,
@@ -1175,6 +1516,38 @@ def _mount_worker_api(
         except (InvalidLease, ArtifactValidationError) as exc:
             raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
         return {"artifact_id": str(artifact_id)}
+
+    if services.training is not None:
+        @app.post(
+            "/api/tasks/{job_id}/checkpoints/{artifact_id}",
+            status_code=status.HTTP_201_CREATED,
+        )
+        def register_worker_checkpoint(
+            job_id: uuid.UUID,
+            artifact_id: uuid.UUID,
+            body: WorkerCheckpointRegisterRequest,
+            lease_token: str = Header(alias="X-Lease-Token"),
+            worker: WorkerPrincipal = Depends(current_worker),
+        ):
+            try:
+                leases.validate(
+                    job_id, lease_token, device_id=worker.device_id)
+                snapshot = jobs.get(job_id)
+                if snapshot.task_type not in {
+                        "reid_training", "detector_training"}:
+                    raise ValueError("只有训练任务可以登记 Checkpoint")
+                run_id = uuid.UUID(
+                    snapshot.input_manifest["training_run_id"])
+                checkpoint_id = services.training.register_checkpoint(
+                    run_id, artifact_id,
+                    stage=body.stage,
+                    epoch=body.epoch, step=body.step,
+                    metadata={},
+                )
+            except (InvalidLease, ValueError, KeyError) as exc:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, str(exc)) from exc
+            return {"checkpoint_id": str(checkpoint_id)}
 
     @app.post("/api/tasks/{job_id}/complete")
     def complete_task(

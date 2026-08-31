@@ -38,12 +38,17 @@ class WorkerApi(Protocol):
     def lease(self) -> TaskLease | None: ...
     def start(self, lease: TaskLease) -> None: ...
     def submit(self, lease: TaskLease, artifact: ArtifactOutput) -> str: ...
+    def register_checkpoint(
+        self, lease: TaskLease, artifact_id: str, *,
+        stage: int, epoch: int, step: int,
+    ) -> str: ...
     def complete(self, lease: TaskLease) -> None: ...
     def fail(self, lease: TaskLease, detail: str) -> None: ...
     def heartbeat(self, lease: TaskLease) -> None: ...
 
 
-Handler = Callable[[TaskLease], ArtifactOutput]
+Handler = Callable[[TaskLease], ArtifactOutput | list[ArtifactOutput] |
+                   tuple[ArtifactOutput, ...]]
 
 
 class WorkerRunner:
@@ -83,14 +88,19 @@ class WorkerRunner:
             )
             heartbeat.start()
             try:
-                artifact = handler(lease)
+                produced = handler(lease)
             finally:
                 stop.set()
                 heartbeat.join(timeout=max(1.0, self._heartbeat_seconds * 2))
             if heartbeat_errors:
                 raise RuntimeError(
                     f"任务心跳失败: {heartbeat_errors[0]}")
-            self._api.submit(lease, artifact)
+            artifacts = [produced] if isinstance(
+                produced, ArtifactOutput) else list(produced)
+            if not artifacts:
+                raise RuntimeError("Worker Handler 没有产生 Artifact")
+            for artifact in artifacts:
+                self._api.submit(lease, artifact)
             self._api.complete(lease)
         except Exception as exc:
             self._api.fail(lease, f"{type(exc).__name__}: {exc}")
@@ -170,6 +180,24 @@ class HttpWorkerApi:
             data=artifact.data, headers=headers)
         return result["artifact_id"]
 
+    def register_checkpoint(
+        self,
+        lease: TaskLease,
+        artifact_id: str,
+        *,
+        stage: int,
+        epoch: int,
+        step: int,
+    ) -> str:
+        result = self._request(
+            "POST", f"api/tasks/{lease.job_id}/checkpoints/{artifact_id}",
+            json_body={
+                "stage": stage, "epoch": epoch, "step": step,
+            },
+            headers={"X-Lease-Token": lease.lease_token},
+        )
+        return result["checkpoint_id"]
+
     def complete(self, lease: TaskLease) -> None:
         self._request(
             "POST", f"api/tasks/{lease.job_id}/complete",
@@ -190,6 +218,22 @@ class HttpWorkerApi:
         return self._request_bytes(
             "GET",
             f"api/tasks/{lease.job_id}/inputs/images/{image_id}",
+            headers={"X-Lease-Token": lease.lease_token},
+        )
+
+    def download_input_crop(self, lease: TaskLease, crop_id: str) -> bytes:
+        return self._request_bytes(
+            "GET",
+            f"api/tasks/{lease.job_id}/inputs/crops/{crop_id}",
+            headers={"X-Lease-Token": lease.lease_token},
+        )
+
+    def download_input_artifact(
+        self, lease: TaskLease, artifact_id: str,
+    ) -> bytes:
+        return self._request_bytes(
+            "GET",
+            f"api/tasks/{lease.job_id}/inputs/artifacts/{artifact_id}",
             headers={"X-Lease-Token": lease.lease_token},
         )
 
