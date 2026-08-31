@@ -25,6 +25,14 @@ M5 保持开发期“成员只管 push，服务器自动更新”的使用方式
 
 网页登录后显示当前分支、commit 和部署时间。`whitewhale-ready.timer` 每分钟检查一次 `/ready`，失败会进入 systemd 日志和 failed unit，可由系统现有告警工具采集。
 
+部署脚本现在会运行镜像内的最小领域/Migration/Faiss 契约测试，而不是只做 `compileall`。成功或任一步失败都会原子写入 `data/working/deploy-status.json`；系统页显示状态和失败命令/Readiness 原因。自动部署的 Migration 检查只允许可静态审查的字面量安全 DDL，动态 SQL 与破坏性变更继续被拒绝。
+
+## 管理面与审计
+
+Web 已提供控制面总览、最近 Job/Attempt/Artifact 数量、批次 Manifest 与 Job 明细、Worker GPU/心跳/当前租约/历史次数、账号角色和审计事件。管理员可撤销设备令牌；服务器仍不向 Worker 暴露 PostgreSQL。
+
+`audit_events` 记录登录成功/失败、退出、用户与 Worker 下载、EXIF 读取、审核票、Catalog 发布/激活/回滚、模型上线以及 Worker 登记和令牌撤销。PostgreSQL 触发器拒绝对该表执行 UPDATE 或 DELETE；开发库和空库 Migration 演练都已实际验证拒绝生效。
+
 ## LAN 与 Tailscale
 
 LAN 使用 Caddy 内部证书站点；Tailscale 只给 tailnet 成员提供网络入口，应用登录仍然必需。当前安装版本验证过的命令是：
@@ -61,7 +69,7 @@ sudo -E /srv/whitewhale/current/deploy/restore-drill.sh \
 
 ## 离线包
 
-`deploy/build-offline-bundle.sh /absolute/new-directory` 会准备锁定 release、平台 wheels、API/Web/PostgreSQL 镜像和总 SHA-256 清单。镜像与 wheels 可能占用数 GB；运行前先估算目标盘空间，完成后保留一份经过校验的包即可。离线机先 `docker load`，再从本地 wheels 安装 Worker；运行时不依赖 GitHub、CDN、Hugging Face 或云数据库。
+`deploy/build-offline-bundle.sh /absolute/new-directory` 会准备锁定 release、平台 wheels、API/Web/PostgreSQL 镜像，以及 `frontend-build/`、`database-migrations/`、`models/`、`model-manifests/`、`configs/`、`scripts/`、`docs/` 和总 SHA-256 清单。通过 `WHITEWHALE_OFFLINE_MODELS_DIR` 指向生产模型目录；未设置时读取 `WHITEWHALE_DATA_ROOT/models`。镜像与 wheels 可能占用数 GB；运行前先估算目标盘空间，完成后保留一份经过校验的包即可。离线机先 `docker load`，再从本地 wheels 安装 Worker；运行时不依赖 GitHub、CDN、Hugging Face 或云数据库。
 
 ## 分层验收
 

@@ -4,7 +4,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import date
+import json
 import os
+from pathlib import Path
 import uuid
 
 import numpy as np
@@ -26,6 +28,7 @@ from .artifacts import (
     ArtifactValidationError,
     WorkerResultService,
 )
+from .audit import AuditService
 from .archival_workflow import ArchivalWorkflowService
 from .archival_dispatch import ArchivalDispatchRequest, ArchivalDispatchService
 from .auth import (
@@ -99,6 +102,7 @@ class PlatformServices:
     identity_changes: IdentityChangeService | None = None
     datasets: DatasetService | None = None
     training: TrainingLifecycleService | None = None
+    audit: AuditService | None = None
 
 
 class _StrictModel(BaseModel):
@@ -406,13 +410,29 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
                 status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
         return {"user_id": str(user.id), "username": user.username}
 
+    @app.get("/api/auth/bootstrap-status")
+    def bootstrap_status():
+        return {"open": services.auth.bootstrap_open()}
+
     @app.post("/api/auth/login")
     def login(credentials: Credentials, response: Response):
         try:
             grant = services.auth.login(
                 credentials.username, credentials.password)
         except (InvalidCredentials, ValueError) as exc:
+            if services.audit is not None:
+                services.audit.record(
+                    "login_failed", actor_type="anonymous",
+                    target_type="username",
+                    target_id=credentials.username.strip()[:128],
+                    detail={"reason": "invalid_credentials"})
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+        if services.audit is not None:
+            logged_in = services.auth.resolve_session(grant.session_token)
+            services.audit.record(
+                "login_succeeded", actor_type="user",
+                actor_user_id=logged_in.user_id,
+                target_type="user", target_id=logged_in.user_id)
         response.set_cookie(
             session_cookie,
             grant.session_token,
@@ -453,16 +473,47 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
     @app.get("/api/system/deployment")
     def deployment(principal: Principal = Depends(current_principal)):
         del principal
-        return {
+        fallback = {
             "branch": os.getenv("WHITEWHALE_DEPLOY_BRANCH", "local"),
             "commit": os.getenv("WHITEWHALE_DEPLOY_COMMIT", "dev"),
             "deployed_at": os.getenv("WHITEWHALE_DEPLOYED_AT", "unknown"),
+            "status": "deployed",
+            "failure_reason": None,
         }
+        status_path = Path(os.getenv(
+            "WHITEWHALE_DEPLOY_STATUS_FILE",
+            str(Path(os.getenv("WHITEWHALE_DATA_ROOT", "/srv/whitewhale/data"))
+                / "working" / "deploy-status.json"),
+        ))
+        try:
+            stored = json.loads(status_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            return fallback
+        if not isinstance(stored, dict):
+            return fallback
+        return {
+            key: stored.get(key, fallback[key]) for key in fallback
+        }
+
+    if services.audit is not None:
+        @app.get("/api/system/audit")
+        def list_audit_events(request: Request, limit: int = 100):
+            principal = current_principal(request)
+            require_admin(principal)
+            try:
+                return services.audit.recent(limit=limit)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     @app.post("/api/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
     def logout(request: Request, response: Response,
                principal: Principal = Depends(protected_write)):
-        del principal
+        if services.audit is not None:
+            services.audit.record(
+                "logout", actor_type="user",
+                actor_user_id=principal.user_id,
+                target_type="session", target_id=principal.session_id)
         token = request.cookies.get(session_cookie)
         if token:
             services.auth.logout(token)
@@ -591,29 +642,91 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
     if services.media is not None:
         @app.get("/api/media/images/{image_id}")
         def get_image(image_id: uuid.UUID, request: Request):
-            current_principal(request)
+            principal = current_principal(request)
             try:
                 media = services.media.image(image_id)
             except MediaNotFound as exc:
                 raise HTTPException(
                     status.HTTP_404_NOT_FOUND, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "media_downloaded", actor_type="user",
+                    actor_user_id=principal.user_id,
+                    target_type="image", target_id=image_id)
             return FileResponse(media.path, media_type=media.media_type)
 
         @app.get("/api/media/crops/{crop_id}")
         def get_crop(crop_id: uuid.UUID, request: Request):
-            current_principal(request)
+            principal = current_principal(request)
             try:
                 media = services.media.crop(crop_id)
             except MediaNotFound as exc:
                 raise HTTPException(
                     status.HTTP_404_NOT_FOUND, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "media_downloaded", actor_type="user",
+                    actor_user_id=principal.user_id,
+                    target_type="crop", target_id=crop_id)
             return FileResponse(media.path, media_type=media.media_type)
 
+        @app.get("/api/images/{image_id}/exif")
+        def get_image_exif(image_id: uuid.UUID, request: Request):
+            principal = current_principal(request)
+            try:
+                exif = services.media.exif(image_id)
+            except MediaNotFound as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "exif_read", actor_type="user",
+                    actor_user_id=principal.user_id,
+                    target_type="image", target_id=image_id)
+            return exif
+
     if services.views is not None:
+        @app.get("/api/dashboard")
+        def dashboard(request: Request):
+            current_principal(request)
+            return services.views.dashboard()
+
         @app.get("/api/batches")
         def list_batches(request: Request):
             current_principal(request)
             return services.views.batches()
+
+        @app.get("/api/batches/{batch_id}")
+        def get_batch(batch_id: uuid.UUID, request: Request):
+            current_principal(request)
+            try:
+                return services.views.batch(batch_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
+        @app.get("/api/jobs")
+        def list_jobs(request: Request, limit: int = 200):
+            current_principal(request)
+            try:
+                return services.views.jobs(limit=limit)
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+
+        @app.get("/api/workers")
+        def list_workers(request: Request):
+            principal = current_principal(request)
+            if principal.roles.isdisjoint({"admin", "operator"}):
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN, "没有 Worker 查看权限")
+            return services.views.workers()
+
+        @app.get("/api/users")
+        def list_users(request: Request):
+            principal = current_principal(request)
+            require_admin(principal)
+            return services.views.users()
 
         @app.get("/api/reviews/inbox")
         def review_inbox(request: Request):
@@ -735,6 +848,12 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
             except ValueError as exc:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "review_vote_submitted", actor_type="user",
+                    actor_user_id=principal.user_id,
+                    target_type="review_task", target_id=task_id,
+                    detail={"choice": body.choice})
             return _review_decision_body(decision)
 
     if services.catalogs is not None:
@@ -763,11 +882,21 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
         ):
             require_reviewer(principal)
             try:
+                previous_id = services.catalogs.active_catalog_id()
                 services.catalogs.activate(catalog_id)
                 snapshot = services.catalogs.active_version()
             except CatalogValidationError as exc:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "catalog_activated" if previous_id is None
+                    else "catalog_rollback" if snapshot.parent_catalog_id
+                    != previous_id else "catalog_activated",
+                    actor_type="user", actor_user_id=principal.user_id,
+                    target_type="catalog", target_id=catalog_id,
+                    detail={"previous_catalog_id": str(previous_id)
+                            if previous_id else None})
             return _catalog_snapshot_body(snapshot)
 
         @app.post("/api/query/embedding")
@@ -879,6 +1008,12 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
             except ValueError as exc:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "catalog_published", actor_type="user",
+                    actor_user_id=principal.user_id,
+                    target_type="catalog", target_id=catalog_id,
+                    detail={"batch_id": str(batch_id)})
             return {"status": "published", "catalog_id": str(catalog_id)}
 
     if services.archival_dispatch is not None:
@@ -1213,6 +1348,13 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
             except (ValueError, JobConflict) as exc:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "model_promotion_requested", actor_type="user",
+                    actor_user_id=principal.user_id,
+                    target_type="model_version", target_id=model_id,
+                    detail={"catalog_rebuild_job_id": str(job_id)
+                            if job_id else None})
             return {"catalog_rebuild_job_id": (
                 str(job_id) if job_id is not None else None)}
 
@@ -1229,6 +1371,12 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
             except ValueError as exc:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "model_promoted", actor_type="user",
+                    actor_user_id=principal.user_id,
+                    target_type="model_version", target_id=model_id,
+                    detail={"catalog_id": str(body.catalog_id)})
             return {"status": "production"}
 
         @app.post("/api/models/{model_id}/catalog-rebuild/ingest")
@@ -1244,6 +1392,13 @@ def _mount_human_api(app: FastAPI, services: PlatformServices) -> None:
             except ValueError as exc:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "model_promoted", actor_type="user",
+                    actor_user_id=principal.user_id,
+                    target_type="model_version", target_id=model_id,
+                    detail={"catalog_id": str(catalog_id),
+                            "source": "catalog_rebuild"})
             return {"status": "production", "catalog_id": str(catalog_id)}
 
     if all((services.worker_auth, services.jobs,
@@ -1296,6 +1451,11 @@ def _mount_worker_api(
     ):
         require_admin(principal)
         code = worker_auth.create_registration_code(principal.user_id)
+        if services.audit is not None:
+            services.audit.record(
+                "worker_registration_code_created", actor_type="user",
+                actor_user_id=principal.user_id,
+                target_type="worker_registration_code")
         return {"registration_code": code}
 
     @app.post("/api/workers/register", status_code=status.HTTP_201_CREATED)
@@ -1319,11 +1479,34 @@ def _mount_worker_api(
         except ValueError as exc:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+        if services.audit is not None:
+            services.audit.record(
+                "worker_registered", actor_type="worker",
+                actor_worker_id=grant.device_id,
+                target_type="worker_device", target_id=grant.device_id,
+                detail={"name": body.name, "gpu_model": body.gpu_model})
         return {
             "device_id": str(grant.device_id),
             "device_token": grant.device_token,
             "token_expires_at": grant.token_expires_at.isoformat(),
         }
+
+    @app.post("/api/workers/{device_id}/revoke")
+    def revoke_worker(
+        device_id: uuid.UUID,
+        principal: Principal = Depends(protected_write),
+    ):
+        require_admin(principal)
+        try:
+            worker_auth.revoke_device(device_id)
+        except InvalidWorkerCredential as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+        if services.audit is not None:
+            services.audit.record(
+                "worker_token_revoked", actor_type="user",
+                actor_user_id=principal.user_id,
+                target_type="worker_device", target_id=device_id)
+        return {"status": "revoked", "device_id": str(device_id)}
 
     @app.post("/api/workers/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
     def worker_heartbeat(
@@ -1414,6 +1597,12 @@ def _mount_worker_api(
             except MediaNotFound as exc:
                 raise HTTPException(
                     status.HTTP_404_NOT_FOUND, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "worker_input_downloaded", actor_type="worker",
+                    actor_worker_id=worker.device_id,
+                    target_type="image", target_id=image_id,
+                    detail={"job_id": str(job_id)})
             return FileResponse(media.path, media_type=media.media_type)
 
         @app.get("/api/tasks/{job_id}/inputs/crops/{crop_id}")
@@ -1433,6 +1622,12 @@ def _mount_worker_api(
             except MediaNotFound as exc:
                 raise HTTPException(
                     status.HTTP_404_NOT_FOUND, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "worker_input_downloaded", actor_type="worker",
+                    actor_worker_id=worker.device_id,
+                    target_type="crop", target_id=crop_id,
+                    detail={"job_id": str(job_id)})
             return FileResponse(media.path, media_type=media.media_type)
 
         @app.get("/api/tasks/{job_id}/inputs/artifacts/{artifact_id}")
@@ -1452,6 +1647,12 @@ def _mount_worker_api(
             except MediaNotFound as exc:
                 raise HTTPException(
                     status.HTTP_404_NOT_FOUND, str(exc)) from exc
+            if services.audit is not None:
+                services.audit.record(
+                    "worker_input_downloaded", actor_type="worker",
+                    actor_worker_id=worker.device_id,
+                    target_type="artifact", target_id=artifact_id,
+                    detail={"job_id": str(job_id)})
             return FileResponse(media.path, media_type=media.media_type)
 
     @app.post(

@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements-platform.txt
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY src ./src
+COPY scripts/release_smoke.py ./scripts/release_smoke.py
 
 RUN useradd --system --uid 10001 --create-home whitewhale \
     && mkdir -p /srv/whitewhale/data \

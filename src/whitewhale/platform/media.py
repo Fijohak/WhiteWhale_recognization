@@ -54,6 +54,13 @@ class MediaService:
             "application/octet-stream"
         return MediaFile(path, media_type, original_name)
 
+    def exif(self, image_id: uuid.UUID) -> dict:
+        with self._sessions() as db:
+            image = db.get(Image, image_id)
+            if image is None:
+                raise MediaNotFound("图片不存在")
+            return dict(image.exif_json)
+
     def leased_image(self, job_id: uuid.UUID, image_id: uuid.UUID) -> MediaFile:
         with self._sessions() as db:
             job = db.get(Job, job_id)

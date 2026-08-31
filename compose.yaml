@@ -30,6 +30,7 @@ services:
       WHITEWHALE_DEPLOY_BRANCH: ${DEPLOY_BRANCH:-local}
       WHITEWHALE_DEPLOY_COMMIT: ${WHITEWHALE_RELEASE_TAG:-dev}
       WHITEWHALE_DEPLOYED_AT: ${WHITEWHALE_DEPLOYED_AT:-unknown}
+      WHITEWHALE_DEPLOY_STATUS_FILE: /srv/whitewhale/data/working/deploy-status.json
     volumes:
       - ${WHITEWHALE_DATA_ROOT:-/srv/whitewhale/data}:/srv/whitewhale/data
     depends_on:

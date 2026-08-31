@@ -81,7 +81,7 @@ class TestPlatformDatabaseMetadata(unittest.TestCase):
             "training_runs", "training_checkpoints",
             "evaluation_runs", "evaluation_results", "model_versions",
             "model_promotion_events", "production_model_pointer",
-            "legacy_artifacts",
+            "legacy_artifacts", "audit_events",
         }
         self.assertTrue(expected.issubset(Base.metadata.tables))
 

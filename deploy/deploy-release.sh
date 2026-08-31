@@ -11,6 +11,34 @@ deploy_remote="${DEPLOY_REMOTE:-origin}"
 keep_releases="${WHITEWHALE_KEEP_RELEASES:-5}"
 ready_url="${WHITEWHALE_READY_URL:-https://127.0.0.1/ready}"
 lock_file="/var/lock/whitewhale-deploy.lock"
+status_file="${WHITEWHALE_DEPLOY_STATUS_FILE:-/srv/whitewhale/data/working/deploy-status.json}"
+status_writer="${WHITEWHALE_REPO}/scripts/write_deploy_status.py"
+target_commit="unknown"
+deployed_at="$(date --utc +%Y-%m-%dT%H:%M:%SZ)"
+
+write_deploy_status() {
+  local state="$1"
+  local reason="${2:-}"
+  local -a status_args=(
+    "${status_file}" --status "${state}" --branch "${DEPLOY_BRANCH}"
+    --commit "${target_commit}" --deployed-at "${deployed_at}"
+  )
+  if [[ -n "${reason}" ]]; then
+    status_args+=(--failure-reason "${reason}")
+  fi
+  python3 "${status_writer}" "${status_args[@]}"
+}
+
+on_error() {
+  local exit_code="$?"
+  local line="$1"
+  local command="$2"
+  trap - ERR
+  write_deploy_status failed "line ${line}: ${command}" || true
+  exit "${exit_code}"
+}
+
+trap 'on_error "${LINENO}" "${BASH_COMMAND}"' ERR
 
 exec 9>"${lock_file}"
 flock -n 9 || exit 0
@@ -62,7 +90,6 @@ if [[ ! -d "${release_path}" ]]; then
   build_root="$(mktemp -d "${WHITEWHALE_RELEASES}/.cleanup-XXXXXX")"
 fi
 
-deployed_at="$(date --utc +%Y-%m-%dT%H:%M:%SZ)"
 compose=(docker compose --env-file "${WHITEWHALE_SHARED_ENV}" -f "${release_path}/compose.yaml")
 WHITEWHALE_RELEASE_TAG="${target_commit}" \
 WHITEWHALE_DEPLOYED_AT="${deployed_at}" \
@@ -70,7 +97,7 @@ DEPLOY_BRANCH="${DEPLOY_BRANCH}" "${compose[@]}" build api web
 WHITEWHALE_RELEASE_TAG="${target_commit}" \
 WHITEWHALE_DEPLOYED_AT="${deployed_at}" \
 DEPLOY_BRANCH="${DEPLOY_BRANCH}" "${compose[@]}" run --rm --no-deps api \
-  python -m compileall -q /app/src
+  python /app/scripts/release_smoke.py
 WHITEWHALE_RELEASE_TAG="${target_commit}" \
 WHITEWHALE_DEPLOYED_AT="${deployed_at}" \
 DEPLOY_BRANCH="${DEPLOY_BRANCH}" "${compose[@]}" run --rm api \
@@ -108,9 +135,13 @@ if ((deploy_failed)); then
   else
     unlink "${WHITEWHALE_CURRENT}"
   fi
+  write_deploy_status failed \
+    "new release failed readiness; previous release restored"
   echo "new release failed readiness; previous release restored" >&2
   exit 1
 fi
+
+write_deploy_status deployed
 
 mapfile -t old_releases < <(find "${WHITEWHALE_RELEASES}" -mindepth 1 -maxdepth 1 \
   -type d -name '[0-9a-f]*' -printf '%T@ %p\n' | sort -nr | tail -n +$((keep_releases + 1)) | cut -d' ' -f2-)

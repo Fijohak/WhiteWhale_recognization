@@ -4,11 +4,15 @@ import { bytesToHex } from "@noble/hashes/utils";
 import {
   completeFile,
   completeSession,
+  bootstrapAdmin,
+  bootstrapStatus,
   createUpload,
   deployment,
   applyMultiTargetReview,
   applyIdentityChange,
   getUploadStatus,
+  getDashboard,
+  getBatch,
   importSession,
   activateCatalog,
   getCandidate,
@@ -19,6 +23,10 @@ import {
   listIndividuals,
   listDatasets,
   listModels,
+  listJobs,
+  listWorkers,
+  listUsers,
+  listAuditEvents,
   listRelationships,
   listTrainingRuns,
   login,
@@ -26,9 +34,16 @@ import {
   me,
   putPart,
   requestModelPromotion,
+  revokeWorker,
   reviewInbox,
   submitVote,
   type BatchSummary,
+  type BatchDetail,
+  type Dashboard,
+  type JobSummary,
+  type WorkerSummary,
+  type UserSummary,
+  type AuditEvent,
   type Candidate,
   type Catalog,
   type Cooccurrence,
@@ -43,6 +58,9 @@ import {
   type TrainingRunSummary,
   type User
 } from "./api";
+
+type Page = "overview" | "upload" | "batches" | "reviews" | "individuals"
+  | "relationships" | "training" | "catalogs" | "workers" | "system";
 
 type Progress = {
   stage: string;
@@ -69,12 +87,17 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [bootstrapOpen, setBootstrapOpen] = useState(false);
+  useEffect(() => {
+    bootstrapStatus().then((value) => setBootstrapOpen(value.open)).catch(() => undefined);
+  }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
+      if (bootstrapOpen) await bootstrapAdmin(username, password);
       onLogin(await login(username, password));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "登录失败");
@@ -88,12 +111,12 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
       <div className="mark">WW</div>
       <p className="eyebrow">RESEARCH CONTROL PLANE</p>
       <h1>中华白海豚<br />识别归档平台</h1>
-      <p className="muted">数据留在课题组服务器，算法结果保持候选状态，正式身份由人工审核决定。</p>
+      <p className="muted">{bootstrapOpen ? "尚无管理员：本次将创建唯一的首位管理员。密码至少 12 个字符。" : "数据留在课题组服务器，算法结果保持候选状态，正式身份由人工审核决定。"}</p>
       <form onSubmit={submit}>
         <label>用户名<input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" /></label>
         <label>密码<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></label>
         {error && <p className="error">{error}</p>}
-        <button disabled={busy}>{busy ? "正在登录…" : "登录"}</button>
+        <button disabled={busy}>{busy ? (bootstrapOpen ? "正在初始化…" : "正在登录…") : (bootstrapOpen ? "创建管理员并登录" : "登录")}</button>
       </form>
     </section>
   </main>;
@@ -199,13 +222,67 @@ function UploadPanel() {
   </section>;
 }
 
+function OverviewPanel() {
+  const [summary, setSummary] = useState<Dashboard | null>(null);
+  const [jobs, setJobs] = useState<JobSummary[]>([]);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    Promise.all([getDashboard(), listJobs()])
+      .then(([dashboard, rows]) => { setSummary(dashboard); setJobs(rows.slice(0, 8)); })
+      .catch((reason) => setError(String(reason)));
+  }, []);
+  return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">OPERATIONS OVERVIEW</p><h2>控制面总览</h2></div></div>
+    {error && <p className="error">{error}</p>}
+    {summary && <div className="card-grid overview-grid">
+      <article className="individual-card"><strong>{Object.values(summary.batch_counts).reduce((a, b) => a + b, 0)}</strong><span>批次总数</span></article>
+      <article className="individual-card"><strong>{summary.queued_jobs}</strong><span>排队任务</span></article>
+      <article className="individual-card"><strong>{summary.pending_reviews}</strong><span>待审核</span></article>
+      <article className="individual-card"><strong>{summary.worker_counts.online}/{summary.worker_counts.total}</strong><span>Worker 在线</span></article>
+      <article className="individual-card"><strong>{summary.failed_jobs}</strong><span>异常终态任务</span></article>
+    </div>}
+    <h3 className="subheading">最近任务</h3>
+    <div className="data-list">{jobs.map((job) => <article key={job.job_id}><div><strong>{job.task_type}</strong><span>{job.job_id.slice(0, 12)}… · {new Date(job.created_at).toLocaleString()}</span>{job.last_error && <small className="error">{job.last_error}</small>}</div><div className="metrics"><b>{job.attempt_count} 次尝试</b><b>{job.artifact_count} 个产物</b><span className="pill">{job.state}</span></div></article>)}</div>
+  </section>;
+}
+
 function BatchesPanel() {
   const [items, setItems] = useState<BatchSummary[]>([]);
+  const [detail, setDetail] = useState<BatchDetail | null>(null);
   const [error, setError] = useState("");
   useEffect(() => { listBatches().then(setItems).catch((e) => setError(String(e))); }, []);
   return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">BATCHES</p><h2>批次进度</h2></div></div>
     {error && <p className="error">{error}</p>}
-    <div className="data-list">{items.map((item) => <article key={item.batch_id}><div><strong>{item.name}</strong><span>{item.source_format} · {new Date(item.created_at).toLocaleString()}</span></div><div className="metrics"><b>{item.image_count} 图</b><b>{item.crop_count} Crop</b><b>{item.cluster_count} 簇</b><span className="pill">{item.stage}</span></div></article>)}</div>
+    <div className="data-list">{items.map((item) => <article key={item.batch_id} onClick={() => getBatch(item.batch_id).then(setDetail).catch((e) => setError(String(e)))}><div><strong>{item.name}</strong><span>{item.source_format} · {new Date(item.created_at).toLocaleString()}</span></div><div className="metrics"><b>{item.image_count} 图</b><b>{item.crop_count} Crop</b><b>{item.cluster_count} 簇</b><span className="pill">{item.stage}</span></div></article>)}</div>
+    {detail && <div className="review-detail"><h3>{detail.name} · Manifest</h3><p className="muted">SHA-256 {detail.manifest_sha256}</p><pre className="plan-preview">{JSON.stringify(detail.metadata, null, 2)}</pre><h3 className="subheading">Job / Attempt 入口</h3><div className="data-list compact">{detail.jobs.map((job) => <article key={job.job_id}><div><strong>{job.task_type}</strong><span>{job.job_id}</span></div><span className="pill">{job.state}</span></article>)}</div></div>}
+  </section>;
+}
+
+function WorkersPanel({ canManage }: { canManage: boolean }) {
+  const [items, setItems] = useState<WorkerSummary[]>([]);
+  const [message, setMessage] = useState("");
+  const refresh = () => listWorkers().then(setItems).catch((reason) => setMessage(String(reason)));
+  useEffect(() => { void refresh(); }, []);
+  async function revoke(deviceId: string) {
+    await revokeWorker(deviceId);
+    setMessage("设备令牌已撤销；该 Worker 不能再领取任务。");
+    await refresh();
+  }
+  return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">GPU WORKERS</p><h2>计算设备</h2></div><span className="pill">训练不在服务器运行</span></div>{message && <p className={message.includes("撤销") ? "success" : "error"}>{message}</p>}<div className="data-list">{items.map((item) => <article key={item.device_id}><div><strong>{item.name}</strong><span>{item.gpu_model} · {item.vram_mb} MiB · CUDA {item.cuda_version}</span><small>{item.capabilities.join(" · ")} · {item.attempt_count} 次任务</small></div><div className="metrics"><b>{item.current_job_id ? `任务 ${item.current_job_id.slice(0, 8)}…` : "空闲"}</b><span className="pill">{item.is_online ? "online" : item.is_active ? "offline" : "revoked"}</span>{canManage && item.is_active && <button className="danger" onClick={() => revoke(item.device_id)}>撤销令牌</button>}</div></article>)}</div></section>;
+}
+
+function SystemPanel({ release }: { release: Deployment | null }) {
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    Promise.all([listUsers(), listAuditEvents()])
+      .then(([userRows, eventRows]) => { setUsers(userRows); setEvents(eventRows); })
+      .catch((reason) => setError(String(reason)));
+  }, []);
+  return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">SYSTEM & AUDIT</p><h2>系统管理</h2></div></div>{error && <p className="error">{error}</p>}
+    {release && <div className="notice inline-notice"><strong>{release.status ?? "deployed"}</strong><span>{release.branch} · {release.commit} · {release.deployed_at}{release.failure_reason ? ` · ${release.failure_reason}` : ""}</span></div>}
+    <h3 className="subheading">账号与角色</h3><div className="data-list compact">{users.map((item) => <article key={item.user_id}><div><strong>{item.username}</strong><span>{item.roles.join(" · ")}</span></div><span className="pill">{item.is_active ? "active" : "disabled"}</span></article>)}</div>
+    <h3 className="subheading">不可变审计</h3><div className="data-list compact">{events.map((item) => <article key={item.audit_event_id}><div><strong>{item.event_type}</strong><span>{item.actor_type} · {item.target_type ?? "-"} {item.target_id?.slice(0, 18) ?? ""}</span></div><small>{new Date(item.occurred_at).toLocaleString()}</small></article>)}</div>
   </section>;
 }
 
@@ -309,7 +386,7 @@ function TrainingPanel() {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState<"upload" | "batches" | "reviews" | "individuals" | "relationships" | "training" | "catalogs">("upload");
+  const [page, setPage] = useState<Page>("overview");
   const [release, setRelease] = useState<Deployment | null>(null);
 
   useEffect(() => {
@@ -321,16 +398,27 @@ export default function App() {
 
   if (loading) return <main className="loading">正在连接控制面…</main>;
   if (!user) return <Login onLogin={setUser} />;
+  const isAdmin = user.roles.includes("admin");
+  const canSeeWorkers = isAdmin || user.roles.includes("operator");
+  const navigation: Array<[Page, string]> = [
+    ["overview", "总览"], ["upload", "批次上传"], ["batches", "批次进度"],
+    ["reviews", "审核中心"], ["individuals", "个体目录"],
+    ["relationships", "关系证据"], ["training", "训练与模型"],
+    ["catalogs", "Catalog"],
+  ];
+  if (canSeeWorkers) navigation.push(["workers", "GPU Worker"]);
+  if (isAdmin) navigation.push(["system", "系统管理"]);
 
   return <div className="app-shell">
     <aside>
       <div className="brand"><div className="mark">WW</div><div><strong>WhiteWhale</strong><span>Control Plane</span></div></div>
-      <nav>{[["upload", "批次上传"], ["batches", "批次进度"], ["reviews", "审核中心"], ["individuals", "个体目录"], ["relationships", "关系证据"], ["training", "训练与模型"], ["catalogs", "Catalog"]].map(([key, label]) => <button key={key} className={page === key ? "active" : ""} onClick={() => setPage(key as typeof page)}>{label}</button>)}</nav>
+      <nav>{navigation.map(([key, label]) => <button key={key} className={page === key ? "active" : ""} onClick={() => setPage(key)}>{label}</button>)}</nav>
       <div className="account"><span>{user.username}</span><small>{user.roles.join(" · ")}</small><button className="quiet" onClick={() => logout().finally(() => setUser(null))}>退出</button></div>
     </aside>
     <main className="workspace">
       <header><div><p className="eyebrow">M5 · DELIVERY</p><h1>海豚归档控制台</h1>{release && <small>{release.branch} · {release.commit.slice(0, 12)} · {release.deployed_at}</small>}</div><div className="status-dot">控制面在线</div></header>
       <div className="notice"><strong>候选不等于正式身份</strong><span>上传完成后，模型只生成候选结果；任何跨时间个体合并均需独立人工审核。</span></div>
+      {page === "overview" && <OverviewPanel />}
       {page === "upload" && <UploadPanel />}
       {page === "batches" && <BatchesPanel />}
       {page === "reviews" && <ReviewPanel />}
@@ -338,6 +426,8 @@ export default function App() {
       {page === "relationships" && <RelationshipsPanel />}
       {page === "training" && <TrainingPanel />}
       {page === "catalogs" && <CatalogPanel />}
+      {page === "workers" && <WorkersPanel canManage={isAdmin} />}
+      {page === "system" && <SystemPanel release={release} />}
     </main>
   </div>;
 }

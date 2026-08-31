@@ -17,6 +17,7 @@ from .app import PlatformServices, Readiness, create_app
 from .archival_workflow import ArchivalWorkflowService
 from .archival_dispatch import ArchivalDispatchService
 from .artifacts import WorkerResultService
+from .audit import AuditService
 from .auth import AuthService
 from .catalogs import CatalogService, CatalogValidationError
 from .cooccurrence import CooccurrenceService
@@ -87,6 +88,7 @@ class PlatformRuntime:
             datasets=DatasetService(self.sessions),
             training=TrainingLifecycleService(
                 self.sessions, jobs, self.storage),
+            audit=AuditService(self.sessions),
         )
         self.app = create_app(
             readiness_probe=self.readiness,

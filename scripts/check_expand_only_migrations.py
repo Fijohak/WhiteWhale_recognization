@@ -10,7 +10,7 @@ from pathlib import Path
 
 FORBIDDEN_CALLS = {
     "drop_column", "drop_constraint", "drop_index", "drop_table",
-    "rename_table", "alter_column", "execute",
+    "rename_table", "alter_column",
 }
 DESTRUCTIVE_SQL = re.compile(
     r"\b(DROP|TRUNCATE|DELETE\s+FROM|ALTER\s+TABLE|UPDATE\s+)\b",
@@ -36,10 +36,25 @@ def validate(path: Path) -> list[str]:
                 and node.func.attr in FORBIDDEN_CALLS:
             failures.append(
                 f"{path}:{node.lineno}: op.{node.func.attr} 禁止自动部署")
+        is_op_execute = (
+            isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "op"
+            and node.func.attr == "execute")
+        if is_op_execute and (
+                not node.args
+                or not isinstance(node.args[0], ast.Constant)
+                or not isinstance(node.args[0].value, str)):
+            failures.append(
+                f"{path}:{node.lineno}: op.execute 只允许可静态审查的字面量 SQL")
         for argument in node.args:
             if isinstance(argument, ast.Constant) \
                     and isinstance(argument.value, str) \
-                    and DESTRUCTIVE_SQL.search(argument.value):
+                    and DESTRUCTIVE_SQL.search(argument.value) \
+                    and not (
+                        is_op_execute
+                        and argument.value.lstrip().upper().startswith(
+                            "CREATE TRIGGER")
+                    ):
                 failures.append(
                     f"{path}:{node.lineno}: 检测到破坏性 SQL")
     return failures

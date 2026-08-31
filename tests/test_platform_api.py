@@ -73,11 +73,19 @@ class TestPlatformBrowserApi(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def _login(self) -> str:
+        self.assertEqual(
+            self.client.get("/api/auth/bootstrap-status").json(),
+            {"open": True},
+        )
         response = self.client.post("/api/auth/bootstrap", json={
             "username": "owner",
             "password": "correct horse battery staple",
         })
         self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(
+            self.client.get("/api/auth/bootstrap-status").json(),
+            {"open": False},
+        )
         response = self.client.post("/api/auth/login", json={
             "username": "owner",
             "password": "correct horse battery staple",

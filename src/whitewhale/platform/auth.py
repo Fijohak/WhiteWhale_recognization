@@ -73,11 +73,19 @@ class AuthService:
 
         with self._sessions.begin() as session:
             session.execute(text("SELECT pg_advisory_xact_lock(91524001)"))
-            if session.scalar(select(User.id).limit(1)) is not None:
+            if self._has_admin(session):
                 raise BootstrapClosed("管理员初始化已关闭")
 
-            roles = {name: Role(name=name) for name in self.ROLE_NAMES}
-            session.add_all(roles.values())
+            roles = {
+                role.name: role for role in session.scalars(
+                    select(Role).where(Role.name.in_(self.ROLE_NAMES)))
+            }
+            missing = [
+                Role(name=name) for name in self.ROLE_NAMES if name not in roles
+            ]
+            session.add_all(missing)
+            session.flush()
+            roles.update({role.name: role for role in missing})
             user = User(
                 username=canonical,
                 password_hash=self._passwords.hash(password),
@@ -86,6 +94,10 @@ class AuthService:
             session.flush()
             session.add(UserRole(user_id=user.id, role_id=roles["admin"].id))
             return user
+
+    def bootstrap_open(self) -> bool:
+        with self._sessions() as session:
+            return not self._has_admin(session)
 
     def login(self, username: str, password: str) -> LoginGrant:
         canonical = _username(username)
@@ -201,3 +213,12 @@ class AuthService:
             )
             if user_session is not None and user_session.revoked_at is None:
                 user_session.revoked_at = datetime.now(UTC)
+
+    @staticmethod
+    def _has_admin(session: Session) -> bool:
+        return session.scalar(
+            select(UserRole.user_id)
+            .join(Role, Role.id == UserRole.role_id)
+            .where(Role.name == "admin")
+            .limit(1)
+        ) is not None

@@ -8,6 +8,17 @@ export type Deployment = {
   branch: string;
   commit: string;
   deployed_at: string;
+  status?: string;
+  failure_reason?: string | null;
+};
+
+export type Dashboard = {
+  batch_counts: Record<string, number>;
+  job_counts: Record<string, number>;
+  worker_counts: { total: number; online: number };
+  pending_reviews: number;
+  failed_jobs: number;
+  queued_jobs: number;
 };
 
 export type ManifestFile = {
@@ -19,6 +30,38 @@ export type ManifestFile = {
 export type BatchSummary = {
   batch_id: string; name: string; stage: string; source_format: string;
   image_count: number; crop_count: number; cluster_count: number; created_at: string;
+};
+
+export type BatchDetail = BatchSummary & {
+  manifest_sha256: string;
+  metadata: Record<string, unknown>;
+  jobs: Array<{ job_id: string; task_type: string; state: string; created_at: string }>;
+};
+
+export type JobSummary = {
+  job_id: string; batch_id: string | null; task_type: string; state: string;
+  priority: number; required_vram_mb: number; required_model_version: string | null;
+  attempt_count: number; artifact_count: number; current_worker_id: string | null;
+  lease_expires_at: string | null; last_error: string | null; created_at: string;
+};
+
+export type WorkerSummary = {
+  device_id: string; name: string; gpu_model: string; vram_mb: number;
+  cuda_version: string; worker_version: string; capabilities: string[];
+  model_versions: string[]; capacity: number; is_active: boolean; is_online: boolean;
+  last_heartbeat_at: string | null; available_capacity: number | null;
+  current_job_id: string | null; attempt_count: number;
+};
+
+export type UserSummary = {
+  user_id: string; username: string; is_active: boolean;
+  roles: string[]; created_at: string;
+};
+
+export type AuditEvent = {
+  audit_event_id: string; actor_type: string; actor_user_id: string | null;
+  actor_worker_id: string | null; event_type: string; target_type: string | null;
+  target_id: string | null; detail: Record<string, unknown>; occurred_at: string;
 };
 
 export type ReviewTask = {
@@ -142,6 +185,18 @@ export async function login(username: string, password: string): Promise<User> {
   return me();
 }
 
+export async function bootstrapStatus(): Promise<{ open: boolean }> {
+  return parse(await fetch("/api/auth/bootstrap-status"));
+}
+
+export async function bootstrapAdmin(username: string, password: string): Promise<void> {
+  await parse(await fetch("/api/auth/bootstrap", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password })
+  }));
+}
+
 export async function me(): Promise<User> {
   return parse(await fetch("/api/auth/me", { credentials: "include" }));
 }
@@ -228,6 +283,36 @@ export async function importSession(
 
 export async function listBatches(): Promise<BatchSummary[]> {
   return parse(await fetch("/api/batches", { credentials: "include" }));
+}
+
+export async function getDashboard(): Promise<Dashboard> {
+  return parse(await fetch("/api/dashboard", { credentials: "include" }));
+}
+
+export async function getBatch(batchId: string): Promise<BatchDetail> {
+  return parse(await fetch(`/api/batches/${batchId}`, { credentials: "include" }));
+}
+
+export async function listJobs(): Promise<JobSummary[]> {
+  return parse(await fetch("/api/jobs", { credentials: "include" }));
+}
+
+export async function listWorkers(): Promise<WorkerSummary[]> {
+  return parse(await fetch("/api/workers", { credentials: "include" }));
+}
+
+export async function revokeWorker(deviceId: string): Promise<void> {
+  await parse(await fetch(`/api/workers/${deviceId}/revoke`, {
+    method: "POST", credentials: "include", headers: writeHeaders()
+  }));
+}
+
+export async function listUsers(): Promise<UserSummary[]> {
+  return parse(await fetch("/api/users", { credentials: "include" }));
+}
+
+export async function listAuditEvents(): Promise<AuditEvent[]> {
+  return parse(await fetch("/api/system/audit", { credentials: "include" }));
 }
 
 export async function reviewInbox(): Promise<ReviewTask[]> {

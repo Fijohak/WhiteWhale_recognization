@@ -22,6 +22,7 @@ from whitewhale.platform.legacy import (  # noqa: E402
     LegacyArtifactSpec,
     LegacyImportService,
 )
+from whitewhale.platform.auth import AuthService, BootstrapClosed  # noqa: E402
 from whitewhale.platform.models import (  # noqa: E402
     ActiveCatalogPointer,
     Base,
@@ -173,6 +174,15 @@ class TestLegacyImport(unittest.TestCase):
             ).hexdigest()
             for item in rows
         }, source_hashes)
+        auth = AuthService(self.sessions)
+        self.assertTrue(auth.bootstrap_open())
+        admin = auth.bootstrap_admin(
+            "first-admin", "correct horse battery staple")
+        self.assertEqual(admin.username, "first-admin")
+        self.assertFalse(auth.bootstrap_open())
+        with self.assertRaises(BootstrapClosed):
+            auth.bootstrap_admin(
+                "second-admin", "another correct horse battery staple")
 
 
 if __name__ == "__main__":

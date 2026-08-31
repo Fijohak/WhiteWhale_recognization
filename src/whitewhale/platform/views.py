@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, aliased, sessionmaker
 
 from .models import (
     Batch,
+    Artifact,
     CandidateCluster,
     CandidateClusterMember,
     ConfirmedIndividual,
@@ -30,6 +32,13 @@ from .models import (
     ReviewTask,
     TrainingRun,
     Job,
+    JobAttempt,
+    JobLease,
+    Role,
+    User,
+    UserRole,
+    WorkerDevice,
+    WorkerHeartbeat,
 )
 
 
@@ -63,6 +72,155 @@ class ArchiveReadService:
                 "cluster_count": cluster_count,
                 "created_at": batch.created_at.isoformat(),
             } for batch, image_count, crop_count, cluster_count in rows]
+
+    def dashboard(self) -> dict:
+        online_after = datetime.now(UTC) - timedelta(minutes=5)
+        with self._sessions() as db:
+            batch_counts = {
+                stage.value: count for stage, count in db.execute(
+                    select(Batch.stage, func.count()).group_by(Batch.stage))
+            }
+            job_counts = {
+                state.value: count for state, count in db.execute(
+                    select(Job.state, func.count()).group_by(Job.state))
+            }
+            worker_total = db.scalar(
+                select(func.count()).select_from(WorkerDevice)) or 0
+            online_workers = db.scalar(select(func.count(func.distinct(
+                WorkerHeartbeat.device_id))).where(
+                    WorkerHeartbeat.reported_at >= online_after)) or 0
+            pending_reviews = db.scalar(select(func.count()).select_from(
+                ReviewTask).where(ReviewTask.status == "open")) or 0
+            failed_jobs = sum(job_counts.get(state, 0) for state in (
+                "failed", "cancelled", "lease_expired"))
+            queued_jobs = job_counts.get("queued", 0)
+            return {
+                "batch_counts": batch_counts,
+                "job_counts": job_counts,
+                "worker_counts": {
+                    "total": worker_total, "online": online_workers},
+                "pending_reviews": pending_reviews,
+                "failed_jobs": failed_jobs,
+                "queued_jobs": queued_jobs,
+            }
+
+    def jobs(self, *, limit: int = 200) -> list[dict]:
+        if limit <= 0 or limit > 1000:
+            raise ValueError("Job 查询 limit 必须为 1–1000")
+        with self._sessions() as db:
+            jobs = list(db.scalars(
+                select(Job).order_by(Job.created_at.desc()).limit(limit)))
+            result = []
+            for job in jobs:
+                attempts = list(db.scalars(select(JobAttempt).where(
+                    JobAttempt.job_id == job.id).order_by(
+                        JobAttempt.attempt_number)))
+                artifact_count = db.scalar(select(func.count()).select_from(
+                    Artifact).where(Artifact.job_id == job.id)) or 0
+                lease = db.scalar(select(JobLease).where(
+                    JobLease.job_id == job.id))
+                latest = attempts[-1] if attempts else None
+                result.append({
+                    "job_id": str(job.id),
+                    "batch_id": str(job.batch_id) if job.batch_id else None,
+                    "task_type": job.task_type,
+                    "state": job.state.value,
+                    "priority": job.priority,
+                    "required_vram_mb": job.required_vram_mb,
+                    "required_model_version": job.required_model_version,
+                    "attempt_count": len(attempts),
+                    "artifact_count": artifact_count,
+                    "current_worker_id": str(lease.device_id)
+                    if lease else None,
+                    "lease_expires_at": lease.lease_expires_at.isoformat()
+                    if lease else None,
+                    "last_error": latest.error_detail if latest else None,
+                    "created_at": job.created_at.isoformat(),
+                })
+            return result
+
+    def workers(self) -> list[dict]:
+        online_after = datetime.now(UTC) - timedelta(minutes=5)
+        with self._sessions() as db:
+            devices = list(db.scalars(select(WorkerDevice).order_by(
+                WorkerDevice.name)))
+            result = []
+            for device in devices:
+                heartbeat = db.scalar(select(WorkerHeartbeat).where(
+                    WorkerHeartbeat.device_id == device.id).order_by(
+                        WorkerHeartbeat.reported_at.desc()).limit(1))
+                lease = db.scalar(select(JobLease).where(
+                    JobLease.device_id == device.id).order_by(
+                        JobLease.leased_at.desc()).limit(1))
+                attempts = db.scalar(select(func.count()).select_from(
+                    JobAttempt).where(
+                        JobAttempt.worker_device_id == device.id)) or 0
+                result.append({
+                    "device_id": str(device.id),
+                    "name": device.name,
+                    "gpu_model": device.gpu_model,
+                    "vram_mb": device.vram_mb,
+                    "cuda_version": device.cuda_version,
+                    "worker_version": device.worker_version,
+                    "capabilities": device.capabilities,
+                    "model_versions": device.model_versions,
+                    "capacity": device.capacity,
+                    "is_active": device.is_active,
+                    "is_online": bool(
+                        device.is_active and heartbeat is not None
+                        and heartbeat.reported_at >= online_after),
+                    "last_heartbeat_at": heartbeat.reported_at.isoformat()
+                    if heartbeat else None,
+                    "available_capacity": heartbeat.available_capacity
+                    if heartbeat else None,
+                    "current_job_id": str(lease.job_id) if lease else None,
+                    "attempt_count": attempts,
+                })
+            return result
+
+    def users(self) -> list[dict]:
+        with self._sessions() as db:
+            users = list(db.scalars(select(User).order_by(User.username)))
+            return [{
+                "user_id": str(user.id),
+                "username": user.username,
+                "is_active": user.is_active,
+                "roles": sorted(db.scalars(
+                    select(Role.name)
+                    .join(UserRole, UserRole.role_id == Role.id)
+                    .where(UserRole.user_id == user.id))),
+                "created_at": user.created_at.isoformat(),
+            } for user in users]
+
+    def batch(self, batch_id: uuid.UUID) -> dict:
+        with self._sessions() as db:
+            batch = db.get(Batch, batch_id)
+            if batch is None:
+                raise ValueError("批次不存在")
+            images = db.scalar(select(func.count()).select_from(Image).where(
+                Image.batch_id == batch_id)) or 0
+            crops = db.scalar(select(func.count()).select_from(Crop).join(
+                Image, Image.id == Crop.image_id).where(
+                    Image.batch_id == batch_id)) or 0
+            jobs = list(db.scalars(select(Job).where(
+                Job.batch_id == batch_id).order_by(Job.created_at)))
+            return {
+                "batch_id": str(batch.id),
+                "name": batch.name,
+                "stage": batch.stage.value,
+                "source_format": batch.source_format,
+                "manifest_sha256": batch.manifest_sha256,
+                "metadata": batch.metadata_json,
+                "image_count": images,
+                "crop_count": crops,
+                "jobs": [{
+                    "job_id": str(job.id),
+                    "task_type": job.task_type,
+                    "state": job.state.value,
+                    "created_at": job.created_at.isoformat(),
+                } for job in jobs],
+                "created_at": batch.created_at.isoformat(),
+            }
 
     def review_inbox(self, reviewer_id: uuid.UUID) -> list[dict]:
         with self._sessions() as db:
