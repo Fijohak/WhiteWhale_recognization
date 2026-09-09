@@ -281,6 +281,7 @@ python scripts/run_cross_time_batch.py --only-gallery        # 只读严格校�
 | `scripts/assign_pool.py` | 同群散图划分：散图对同群已确认个体 Top-K 候选（低分标记疑似新个体） |
 | `scripts/train_detector.py` | 训练 YOLO 背鳍检测器（数据由 `scripts/build_yolo_det_dataset.py` + SAM 预标注构建） |
 | `scripts/contact_sheets.py` | 候选簇拼图（已被审核网页取代，备用） |
+| `demo/` | 申报演示材料生成（检测可视化 / 聚类关系网页，见 §4.10） |
 
 ### 4.9 数据管理工具（3.2/3.3/3.6/1.9 支撑）
 
@@ -290,6 +291,20 @@ python scripts/run_cross_time_batch.py --only-gallery        # 只读严格校�
 | `scripts/group_sequences.py` | 散图连拍串分组：按文件名连拍号分串（322 张散图 → 78 串）+ A9 抽样核验清单；核验通过前不用于划归 |
 | `scripts/build_eval_set.py` | 人工评估集划分草案：确认个体 → 按 Sequence 划分 query/gallery（同序列不拆分防泄漏）；草案须人工确认 |
 | `scripts/export_relations.py` | 确认关系表导出：confirmed_same 对 + confirmed_different / possibly_same 空表结构（数据源待 3.8） |
+
+### 4.10 申报演示材料（demo/）
+
+一次性生成申报用示例图（不属于科研流程，产物在 `outputs/demo/`）：
+
+```bash
+python demo/make_detection_demo.py            # 背鳍检测：网格拼图 + 单图（标注模型/检测框/置信度）
+python demo/make_cluster_demo.py              # 相似个体聚类网页：中心代表图 + 环绕成员图 + 连线相似度
+```
+
+| 脚本 | 产物 | 数据源 |
+|---|---|---|
+| `demo/make_detection_demo.py` | `detection_demo_grid.jpg`、`singles/*.jpg` | 原图 + YOLO 检测（自动挑 TOP-N 高置信图） |
+| `demo/make_cluster_demo.py` | `cluster_demo.html`（单文件，图片内嵌） | 管线产物 clusters.csv + embeddings.npy + crops/ |
 
 ## 5. 配置
 
@@ -333,6 +348,7 @@ WhiteWhale_recognization/
 │   ├── query.py               #   查询客户端应用
 │   └── config.py              #   yaml 统一加载（load_config）
 ├── configs/                   # 统一配置：pipeline.yaml / reid.yaml / detector.yaml
+├── demo/                      # 申报演示材料生成（检测可视化 / 聚类关系网页，见 §4.10）
 ├── docs/                      # 操作手册（历史库核验与跨年匹配重建）
 ├── experiments/               # 一次性科研实验（benchmark/评估预演；可追溯，不参与正式流程）
 ├── tests/                     # pytest 回归测试（见 §7）
